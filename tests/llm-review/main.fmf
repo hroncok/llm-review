@@ -13,8 +13,9 @@
     - git
     - rpm
     - rpmlint
-    - python3-pip
+    - python3
   test: |
-    pip install --no-cache-dir "$TMT_TREE"
-    LLM_REVIEW_SKILL_DIR="$TMT_TREE/skills/fedora-package-review" python3 -m llm_review
+    python3 -m venv .venv
+    .venv/bin/pip install --no-cache-dir "$TMT_TREE"
+    LLM_REVIEW_SKILL_DIR="$TMT_TREE/skills/fedora-package-review" .venv/bin/python -m llm_review
   result: custom
