@@ -106,3 +106,10 @@ $ pytest
 
 Unit tests cover pure logic only (Koji ID/URL parsing, backend config,
 verdict-to-result mapping) -- no network or LLM calls.
+
+## License
+
+MIT, see [LICENSE](LICENSE) -- carried over from
+[`packit/tmt-plans`](https://github.com/packit/tmt-plans), whose conventions
+(Koji task handling, the tmt `/prepare` + `/run-*` split, the `results.yaml`
+custom-result approach) this project is built directly on top of.

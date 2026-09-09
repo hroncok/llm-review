@@ -7,6 +7,8 @@ name = "llm-review"
 version = "0.1.0"
 description = "AI-powered Fedora package review for Fedora CI, driven by the fedora-package-review Claude Code skill"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "claude-agent-sdk",
