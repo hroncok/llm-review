@@ -88,12 +88,14 @@ def main(argv: list[str] | None = None) -> int:
             logger.error("Review failed: %s", exc)
             return 1
 
+        output_dir = args.output_dir.resolve()
         result = write_output(
             review,
-            args.output_dir,
+            output_dir,
             extra_logs=[workdir / "koji-taskinfo.txt"],
         )
         logger.info("Verdict: %s (tmt result: %s)", review.verdict, result.value)
+        logger.info("Results written to %s", output_dir)
         return exit_code_for(result)
 
     if args.workdir:
