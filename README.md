@@ -9,11 +9,6 @@ skill against them headlessly through the
 [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/), producing a
 structured review report and a Fedora-CI-style result.
 
-The skill in this repo is a copy of the interactive
-`~/.claude/skills/fedora-package-review` skill, adapted to run unattended
-against a Koji build instead of a COPR/Bugzilla review request -- your local
-skill is untouched.
-
 ## How it works
 
 1. `llm_review.koji` resolves a Koji task ID (bare, or from a
