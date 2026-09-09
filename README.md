@@ -91,11 +91,37 @@ plan, structured like the existing
 `fedora-review`), so it can later be referenced from `shared-tests` the same
 way via `plan.import` -- that wiring is not part of this repo.
 
-Run it locally with:
+tmt's `local` provisioner does not automatically forward the host's
+environment to the test -- pass everything the tool needs (the Koji task and
+your backend config, see "Configuration" above) explicitly with `-e`, e.g.
+forwarding your already-exported Vertex config:
 
 ```console
-$ tmt run -a provision -h local plan --name /plans/llm-review -e KOJI_TASK_ID=123456789
+$ tmt --feeling-safe run \
+    -e KOJI_TASK_ID=123456789 \
+    -e HOME=$HOME \
+    -e ANTHROPIC_VERTEX_PROJECT_ID=$ANTHROPIC_VERTEX_PROJECT_ID \
+    -e CLOUD_ML_REGION=$CLOUD_ML_REGION \
+    -a provision -h local plan --name /plans/llm-review
 ```
+
+The extra `-e HOME=$HOME` is needed because tmt's `local` provisioner
+executes guest operations via `sudo`, which resets `HOME` to root's home by
+default -- without it, Vertex's `gcloud` Application Default Credentials
+lookup fails with "Could not load the default credentials" (it looks under
+`$HOME/.config/gcloud/`, i.e. `/root/...` instead of your real home).
+
+This only works because `local` shares your actual filesystem. It won't
+work with a container/VM provisioner (`-h container`/`-h virtual`) -- those
+guests have their own isolated filesystem, so neither `HOME` nor
+`GOOGLE_APPLICATION_CREDENTIALS` can point at a file that only exists on the
+host. Amazon Bedrock doesn't have this problem, since its auth is plain
+environment variables (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/
+`AWS_SESSION_TOKEN` or `AWS_BEARER_TOKEN_BEDROCK`), not a credentials file.
+
+`--feeling-safe` is required by tmt's `local` provision plugin, since it runs
+directly on this machine rather than in a container/VM (it installs
+packages, runs `pip install`, executes `rpmlint`, etc. on your host).
 
 ## Development
 
