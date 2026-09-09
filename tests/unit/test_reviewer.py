@@ -30,7 +30,11 @@ def test_extract_verdict_missing_raises():
 
 
 def test_count_issues_none():
-    report = "### ISSUES\n\nNone.\n\n### VERDICT\n\napprove\n"
+    report = (
+        "### ISSUES\n\nNone.\n\n"
+        "### SUMMARY\n\nBlockers: 0\nShould-fix: 0\nMinor: 0\n\n"
+        "### VERDICT\n\napprove\n"
+    )
     assert _count_issues(report) == {"blocker": 0, "should-fix": 0, "minor": 0}
 
 
@@ -41,6 +45,7 @@ def test_count_issues_mixed():
         "2. **Should-fix**: use %license macro\n"
         "3. **Minor**: typo in summary\n"
         "4. **Minor**: changelog nit\n\n"
+        "### SUMMARY\n\nBlockers: 1\nShould-fix: 1\nMinor: 2\n\n"
         "### VERDICT\n\nneeds fixes\n"
     )
     assert _count_issues(report) == {"blocker": 1, "should-fix": 1, "minor": 2}
@@ -49,13 +54,34 @@ def test_count_issues_mixed():
 def test_count_issues_approve_with_minor_only():
     report = (
         "### ISSUES\n\n1. **Minor**: consider tightening the Requires\n\n"
+        "### SUMMARY\n\nBlockers: 0\nShould-fix: 0\nMinor: 1\n\n"
         "### VERDICT\n\napprove\n"
     )
     assert _count_issues(report) == {"blocker": 0, "should-fix": 0, "minor": 1}
 
 
+def test_count_issues_ignores_negation_prose_elsewhere_in_report():
+    # Real-world case: the model wrote "No **Blocker** ... issues were found."
+    # as prose in ### ISSUES -- that must not affect the ### SUMMARY counts,
+    # which are what's actually parsed.
+    report = (
+        "### ISSUES\n\n"
+        "1. **Minor**: spelling-error false positive for a proper noun\n"
+        "2. **Minor**: %check only runs an import smoke test\n\n"
+        "No **Blocker** (MUST-level) issues were found.\n\n"
+        "### SUMMARY\n\nBlockers: 0\nShould-fix: 0\nMinor: 2\n\n"
+        "### VERDICT\n\napprove\n"
+    )
+    assert _count_issues(report) == {"blocker": 0, "should-fix": 0, "minor": 2}
+
+
+def test_count_issues_missing_summary_section_defaults_to_zero():
+    report = "### ISSUES\n\n1. **Blocker**: something bad\n\n### VERDICT\n\nneeds fixes\n"
+    assert _count_issues(report) == {"blocker": 0, "should-fix": 0, "minor": 0}
+
+
 def test_count_issues_missing_section():
-    assert _count_issues("no issues section here") == {
+    assert _count_issues("no sections here") == {
         "blocker": 0,
         "should-fix": 0,
         "minor": 0,
