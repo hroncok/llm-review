@@ -193,9 +193,11 @@ listed above -- don't include a line here for anything you didn't actually
 list as a numbered issue (e.g. don't count a sentence like "no blockers were
 found").
 
-The `### VERDICT` line must contain exactly one of `approve`, `needs fixes`,
-`needs discussion`, or `error` -- the caller parses this line programmatically
-to decide the CI result.
+The `### VERDICT` line must contain *only* the bare word `approve`,
+`needs fixes`, `needs discussion`, or `error` -- no bold/markdown formatting,
+no trailing period, no additional commentary on that line. The caller
+parses this line programmatically to decide the CI result; put any
+elaboration in the PASS/ISSUES sections instead.
 
 Use `error` when the review could not actually be performed (see "If you
 cannot actually perform the review" above) -- in that case, the ### PASS,

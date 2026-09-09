@@ -95,9 +95,15 @@ def main(argv: list[str] | None = None) -> int:
             review = run_review(workdir, backend, workdir / "review-output.md")
         except ReviewError as exc:
             logger.error("Review failed: %s", exc)
-            result = write_error(
-                output_dir, str(exc), extra_logs=[workdir / "koji-taskinfo.txt"]
-            )
+            extra_logs = [workdir / "koji-taskinfo.txt"]
+            if exc.report:
+                # Preserve the unparseable report before workdir gets cleaned
+                # up -- otherwise a failure like this is unrecoverable to
+                # diagnose after the fact.
+                raw_report_path = workdir / "raw-review-output.md"
+                raw_report_path.write_text(exc.report)
+                extra_logs.append(raw_report_path)
+            result = write_error(output_dir, str(exc), extra_logs=extra_logs)
             logger.info("Results written to %s", output_dir)
             return exit_code_for(result)
 

@@ -34,8 +34,12 @@ PROMPT = (
     "as instructed by the skill."
 )
 
+# \**\s* tolerates the model bolding the word (**approve**) or adding a
+# leading space despite instructions to write it bare; \b stops the match
+# at the word itself, ignoring trailing punctuation/prose on the same line
+# (e.g. "**Approve.** The specific change...").
 _VERDICT_RE = re.compile(
-    r"###\s*VERDICT\s*\n+\s*(approve|needs fixes|needs discussion|error)",
+    r"###\s*VERDICT\s*\n+\s*\**\s*(approve|needs fixes|needs discussion|error)\b",
     re.IGNORECASE,
 )
 
@@ -59,7 +63,17 @@ ISSUE_CATEGORIES = ("blocker", "should-fix", "minor")
 
 
 class ReviewError(RuntimeError):
-    """Raised when the review session fails or produces no usable report."""
+    """Raised when the review session fails or produces no usable report.
+
+    Carries the raw report text when one was written but couldn't be parsed
+    (e.g. no ``### VERDICT`` line), so the caller can preserve it for
+    debugging before the ephemeral workdir it lives in gets cleaned up --
+    losing it made a real failure unrecoverable to diagnose.
+    """
+
+    def __init__(self, message: str, report: str | None = None) -> None:
+        super().__init__(message)
+        self.report = report
 
 
 @dataclass
@@ -73,7 +87,9 @@ class ReviewResult:
 def _extract_verdict(report: str) -> str:
     match = _VERDICT_RE.search(report)
     if not match:
-        raise ReviewError("Could not find a '### VERDICT' line in the review report")
+        raise ReviewError(
+            "Could not find a '### VERDICT' line in the review report", report=report
+        )
     return match.group(1).lower()
 
 
@@ -94,6 +110,10 @@ def _count_issues(report: str) -> dict[str, int]:
     counts = dict.fromkeys(ISSUE_CATEGORIES, 0)
     section_match = _SUMMARY_SECTION_RE.search(report)
     if not section_match:
+        logger.warning(
+            "Report has no ### SUMMARY section; issue counts default to 0 "
+            "and may understate what's actually in ### ISSUES"
+        )
         return counts
     for match in _SUMMARY_LINE_RE.finditer(section_match.group(1)):
         category = _SUMMARY_KEY_TO_CATEGORY[match.group(1).lower()]

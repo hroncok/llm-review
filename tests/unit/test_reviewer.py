@@ -31,6 +31,13 @@ def _result_message(**overrides) -> ResultMessage:
         ("### VERDICT\n\nNeeds Discussion\n", "needs discussion"),
         ("### VERDICT\n\nError\n", "error"),
         ("## Package Review: foo 1-1\n\n...\n\n### VERDICT\n\napprove\n", "approve"),
+        # Real-world case: the model bolded the word and added trailing
+        # punctuation/prose instead of writing it bare as instructed.
+        (
+            "### VERDICT\n\n**Approve.** The specific change under test is correctly...",
+            "approve",
+        ),
+        ("### VERDICT\n\n**needs fixes**\n", "needs fixes"),
     ],
 )
 def test_extract_verdict(report, expected):
@@ -40,6 +47,13 @@ def test_extract_verdict(report, expected):
 def test_extract_verdict_missing_raises():
     with pytest.raises(ReviewError):
         _extract_verdict("no verdict section here")
+
+
+def test_extract_verdict_missing_preserves_report_for_debugging():
+    report = "## Package Review: foo 1-1\n\nsome long report with no verdict section"
+    with pytest.raises(ReviewError) as exc_info:
+        _extract_verdict(report)
+    assert exc_info.value.report == report
 
 
 def test_count_issues_none():
