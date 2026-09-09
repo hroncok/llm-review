@@ -82,11 +82,10 @@ def write_output(
             log_names.append(log.name)
 
     result = result_for_verdict(review.verdict)
-    # tmt's result_note schema declares a single string, not a list -- see
-    # https://tmt.readthedocs.io/en/stable/spec/plans.html#execute
-    note = f"verdict: {review.verdict}"
+    # tmt's result_note schema is an array of strings.
+    note = [f"verdict: {review.verdict}"]
     if issues_note := _issue_counts_note(review.issue_counts):
-        note += f"; {issues_note}"
+        note.append(issues_note)
     data = [
         {
             "name": "/",
@@ -125,7 +124,7 @@ def write_error(
         {
             "name": "/",
             "result": Result.ERROR.value,
-            "note": message,
+            "note": [message],
             "log": log_names,
         }
     ]

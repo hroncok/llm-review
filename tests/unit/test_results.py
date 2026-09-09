@@ -61,7 +61,7 @@ def test_write_output_pass(tmp_path: Path):
         {
             "name": "/",
             "result": "pass",
-            "note": "verdict: approve",
+            "note": ["verdict: approve"],
             "log": ["review.md"],
         }
     ]
@@ -79,7 +79,7 @@ def test_write_output_approve_with_minor_issues_notes_them(tmp_path: Path):
     write_output(review, output_dir)
 
     data = yaml.safe_load((output_dir / RESULTS_FILENAME).read_text())
-    assert data[0]["note"] == "verdict: approve; issues: 2 minor"
+    assert data[0]["note"] == ["verdict: approve", "issues: 2 minor"]
 
 
 def test_write_output_includes_extra_logs(tmp_path: Path):
@@ -136,7 +136,7 @@ def test_write_error(tmp_path: Path):
         {
             "name": "/",
             "result": "error",
-            "note": "no RPM artifacts to review",
+            "note": ["no RPM artifacts to review"],
             "log": [],
         }
     ]

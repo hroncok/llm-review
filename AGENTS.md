@@ -97,11 +97,12 @@ This distinction was a real bug we fixed, worth preserving explicitly:
 - `cli.py` routes every failure path (`WorkspaceError`, `ReviewError`) through
   `results.write_error()` so a `results.yaml` is *always* produced — never
   exit silently with just a log line and no result file.
-- tmt's `result_note` field (`tmt/schemas/common.yaml`) is a plain
-  **string**, not a list — even though upstream `packit/tmt-plans` code
-  sometimes writes `note: [single_item]`, don't copy that; keep it a single
-  string here (see `results._issue_counts_note` composing one string with
-  `; `).
+- tmt's `result_note` field is an **array of strings** (`results.py` writes
+  `note: [...]`), matching `packit/tmt-plans`. Got this backwards once: a
+  stale local `tmt` git checkout (1.30.0) had `result_note: type: string`,
+  and that got trusted over the *actually installed* tmt (1.77.0), which has
+  `type: array`. Check the installed package's own schema, not a local
+  clone that could be an arbitrary vintage.
 - Exit codes mirror the tmt result: `pass`/`info` → 0, `fail` → 1,
   `error` → 2. Argument/config validation errors in `cli.py` also return 2,
   consistent with `error` being "something's wrong with the setup," not
