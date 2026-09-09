@@ -33,7 +33,25 @@ Backend selection is environment-variable driven, mirroring the same
 variables Claude Code itself uses (see `src/llm_review/config.py`):
 
 - `LLM_REVIEW_BACKEND`: `vertex` (default) or `bedrock`.
-- `LLM_REVIEW_MODEL`: optional model override.
+- `LLM_REVIEW_MODEL`: optional model override, passed straight through as
+  `ClaudeAgentOptions.model` (`--model`). Leave unset to use Claude Code's
+  built-in default for the backend. A generic alias (`sonnet`, `opus`,
+  `haiku`) works on both backends, resolving to whatever Claude Code's
+  current default is for that tier -- fine for casual use, but pin an exact
+  ID for reproducible CI runs. Valid IDs are backend-specific and change
+  over time as new models ship, so don't hardcode a list here -- find the
+  current ones in:
+  - **Vertex**: the [Model
+    Garden](https://console.cloud.google.com/vertex-ai/model-garden) in your
+    GCP project lists the exact Claude model IDs enabled there, e.g.
+    `claude-opus-5`, `claude-sonnet-5`, `claude-haiku-4-5@20251001`.
+  - **Bedrock**: `aws bedrock list-inference-profiles --region <region>`
+    lists what your AWS account can invoke, e.g. `us.anthropic.claude-sonnet-4-6`
+    (a cross-region inference profile ID), or an application inference
+    profile ARN.
+  - Anthropic's [models
+    overview](https://platform.claude.com/docs/en/about-claude/models/overview)
+    lists the canonical, current model names/IDs for both.
 - **Vertex** (today's default): `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION`,
   plus standard `gcloud` Application Default Credentials.
 - **Bedrock** (once available): `AWS_REGION`, plus the standard AWS credential
