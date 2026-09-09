@@ -186,3 +186,10 @@ hunting for the skill file instead of a `Skill` tool call.
   No email address. Use whichever model actually did the work — don't
   hardcode a specific model name in tooling or templates, since it will
   change over time.
+- **When a commit is a fixup for something just committed in the same
+  session** (a bug found in, or a change of approach to, work from a commit
+  earlier in the same conversation) — ask the user whether it should be a
+  new commit or amended/squashed into the one it's fixing, rather than
+  assuming either way. Don't use `git commit --amend` or squash on your own
+  initiative without asking first, even if it seems obviously right; do
+  follow through promptly once they say which they want.
