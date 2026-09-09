@@ -22,5 +22,12 @@ llm-review = "llm_review.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/llm_review"]
 
+# The skill lives at the top-level `skills/` directory (kept there so it's
+# easy to diff/edit against the original interactive skill), not inside
+# src/llm_review/ -- bundle it as package data so it survives a regular
+# non-editable `pip install`, not just an editable/in-place checkout.
+[tool.hatch.build.targets.wheel.force-include]
+"skills/fedora-package-review" = "llm_review/skill_data/fedora-package-review"
+
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

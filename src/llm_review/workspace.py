@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from importlib import resources
 from pathlib import Path
 
 from . import koji
@@ -18,17 +19,26 @@ class WorkspaceError(RuntimeError):
 
 
 def default_skill_source() -> Path:
-    """Locate the repo's ``skills/fedora-package-review`` directory.
+    """Locate the ``fedora-package-review`` skill directory.
 
-    Assumes this package runs in place from a source checkout (editable
-    install or ``PYTHONPATH=src``), which is how it's invoked in CI (tmt
-    fetches the whole repo and runs it from there). Override with
-    ``LLM_REVIEW_SKILL_DIR`` if that assumption doesn't hold.
+    Tries, in order: an explicit override, the repo's top-level ``skills/``
+    directory (works when running in place from a source checkout, e.g. an
+    editable install or ``PYTHONPATH=src`` -- the top-level directory is the
+    canonical, human-editable copy), and finally the copy bundled as package
+    data (``[tool.hatch.build.targets.wheel.force-include]`` in
+    pyproject.toml), which is what a regular non-editable ``pip install``
+    falls back on since it doesn't keep the sibling ``skills/`` directory.
     """
     if override := os.environ.get("LLM_REVIEW_SKILL_DIR"):
         return Path(override)
+
     repo_root = Path(__file__).resolve().parents[2]
-    return repo_root / "skills" / SKILL_NAME
+    repo_skill_dir = repo_root / "skills" / SKILL_NAME
+    if repo_skill_dir.is_dir():
+        return repo_skill_dir
+
+    packaged_skill_dir = resources.files("llm_review") / "skill_data" / SKILL_NAME
+    return Path(str(packaged_skill_dir))
 
 
 def clone_guidelines(workdir: Path) -> None:
