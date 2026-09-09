@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
+from functools import partial
 from importlib import resources
 from pathlib import Path
 
 from . import koji
+from .retry import run_with_retry
 
 GUIDELINES_URL = "https://forge.fedoraproject.org/packaging/guidelines.git"
 SKILL_NAME = "fedora-package-review"
@@ -43,9 +44,11 @@ def default_skill_source() -> Path:
 
 def clone_guidelines(workdir: Path) -> None:
     dest = workdir / "guidelines"
-    subprocess.run(
+    run_with_retry(
         ["git", "clone", "--depth", "1", GUIDELINES_URL, str(dest)],
-        check=True,
+        # A retry must find `dest` gone, or git fails with "destination path
+        # already exists" instead of actually retrying the clone.
+        on_retry=partial(shutil.rmtree, dest, ignore_errors=True),
     )
 
 

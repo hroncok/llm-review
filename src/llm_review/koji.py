@@ -9,9 +9,10 @@ from the downloaded SRPM itself.
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+from .retry import run_with_retry
 
 _TASK_ID_RE = re.compile(r"^\d+$")
 
@@ -37,20 +38,22 @@ def _profile_args(profile: str | None) -> list[str]:
 
 def fetch_taskinfo(task_id: str, profile: str | None = None) -> str:
     """Return the output of ``koji taskinfo -v <task_id>``."""
-    result = subprocess.run(
+    result = run_with_retry(
         ["koji", *_profile_args(profile), "taskinfo", "-v", task_id],
         capture_output=True,
         text=True,
-        check=True,
     )
     return result.stdout
 
 
 def download_artifacts(task_id: str, dest: Path, profile: str | None = None) -> None:
-    """Download the task's SRPM, RPMs, and logs into ``dest``."""
+    """Download the task's SRPM, RPMs, and logs into ``dest``.
+
+    Safe to retry as-is: ``koji download-task`` skips files it already
+    downloaded into ``dest`` rather than starting over.
+    """
     dest.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
+    run_with_retry(
         ["koji", *_profile_args(profile), "download-task", task_id, "--logs"],
         cwd=dest,
-        check=True,
     )

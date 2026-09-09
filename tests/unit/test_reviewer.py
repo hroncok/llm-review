@@ -3,11 +3,14 @@ from claude_agent_sdk import ResultMessage, ToolUseBlock
 
 from llm_review.reviewer import (
     ReviewError,
+    ReviewResult,
+    TransientReviewError,
     _count_issues,
     _extract_verdict,
     _result_error_text,
     _tool_use_preview,
     _truncate,
+    run_review,
 )
 
 
@@ -160,3 +163,84 @@ def test_result_error_text_prefers_result_over_success_subtype():
 def test_result_error_text_falls_back_to_subtype_when_no_result():
     message = _result_message(subtype="error_max_turns", result=None)
     assert _result_error_text(message) == "error_max_turns"
+
+
+class _FakeRun:
+    """Stand-in for reviewer._run: raises N times, then returns a result."""
+
+    def __init__(self, failures: int, result=None, exc=None):
+        self.failures = failures
+        self.result = result
+        self.exc_factory = exc or (lambda: TransientReviewError("transient"))
+        self.calls = 0
+
+    async def __call__(self, workdir, backend, output_path):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise self.exc_factory()
+        return self.result
+
+
+def test_run_review_retries_transient_error_then_succeeds(monkeypatch, tmp_path):
+    fake_result = ReviewResult(
+        report="r", verdict="approve", transcript="", issue_counts={}
+    )
+    fake_run = _FakeRun(failures=2, result=fake_result)
+    monkeypatch.setattr("llm_review.reviewer._run", fake_run)
+    sleeps = []
+
+    result = run_review(
+        tmp_path, backend=None, output_path=tmp_path / "out.md", sleep=sleeps.append
+    )
+
+    assert result is fake_result
+    assert fake_run.calls == 3
+    assert len(sleeps) == 2
+
+
+def test_run_review_gives_up_after_max_retries(monkeypatch, tmp_path):
+    fake_run = _FakeRun(failures=99)
+    monkeypatch.setattr("llm_review.reviewer._run", fake_run)
+    sleeps = []
+
+    with pytest.raises(TransientReviewError):
+        run_review(
+            tmp_path,
+            backend=None,
+            output_path=tmp_path / "out.md",
+            max_retries=2,
+            sleep=sleeps.append,
+        )
+
+    assert fake_run.calls == 3  # initial attempt + 2 retries
+    assert len(sleeps) == 2
+
+
+def test_run_review_does_not_retry_non_transient_error(monkeypatch, tmp_path):
+    fake_run = _FakeRun(failures=1, exc=lambda: ReviewError("not transient"))
+    monkeypatch.setattr("llm_review.reviewer._run", fake_run)
+    sleeps = []
+
+    with pytest.raises(ReviewError):
+        run_review(
+            tmp_path, backend=None, output_path=tmp_path / "out.md", sleep=sleeps.append
+        )
+
+    assert fake_run.calls == 1
+    assert sleeps == []
+
+
+def test_run_review_backoff_is_exponential(monkeypatch, tmp_path):
+    fake_run = _FakeRun(failures=3, result="done")
+    monkeypatch.setattr("llm_review.reviewer._run", fake_run)
+    sleeps = []
+
+    run_review(
+        tmp_path,
+        backend=None,
+        output_path=tmp_path / "out.md",
+        max_retries=3,
+        sleep=sleeps.append,
+    )
+
+    assert sleeps == [5.0, 10.0, 20.0]

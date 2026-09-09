@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -74,6 +77,17 @@ class ReviewError(RuntimeError):
     def __init__(self, message: str, report: str | None = None) -> None:
         super().__init__(message)
         self.report = report
+
+
+class TransientReviewError(ReviewError):
+    """An API-level session failure worth retrying (rate limit, network
+    blip, transient overload, ...), as opposed to a completed-but-malformed
+    report or a deterministic setup failure -- retrying those wouldn't help.
+    """
+
+
+DEFAULT_MAX_RETRIES = int(os.environ.get("LLM_REVIEW_MAX_RETRIES", "2"))
+_RETRY_BACKOFF_BASE_S = 5.0
 
 
 @dataclass
@@ -183,7 +197,9 @@ async def _run(
                     )
         elif isinstance(message, ResultMessage):
             if message.is_error:
-                raise ReviewError(f"Claude session ended in error: {_result_error_text(message)}")
+                raise TransientReviewError(
+                    f"Claude session ended in error: {_result_error_text(message)}"
+                )
             cost_usd = message.total_cost_usd
             duration_s = message.duration_ms / 1000
             logger.info(
@@ -210,5 +226,32 @@ async def _run(
     )
 
 
-def run_review(workdir: Path, backend: BackendConfig, output_path: Path) -> ReviewResult:
-    return asyncio.run(_run(workdir, backend, output_path))
+def run_review(
+    workdir: Path,
+    backend: BackendConfig,
+    output_path: Path,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    sleep: Callable[[float], None] = time.sleep,
+) -> ReviewResult:
+    """Run the review session, retrying on transient API-level failures.
+
+    Only ``TransientReviewError`` is retried -- a malformed/missing report
+    or a deterministic setup failure isn't, since retrying wouldn't help.
+    Backoff is exponential: ``_RETRY_BACKOFF_BASE_S * 2**attempt``.
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            return asyncio.run(_run(workdir, backend, output_path))
+        except TransientReviewError as exc:
+            if attempt >= max_retries:
+                logger.error("Giving up after %d attempt(s): %s", attempt + 1, exc)
+                raise
+            wait = _RETRY_BACKOFF_BASE_S * (2**attempt)
+            logger.warning(
+                "Transient failure on attempt %d/%d: %s -- retrying in %.0fs",
+                attempt + 1,
+                max_retries + 1,
+                exc,
+                wait,
+            )
+            sleep(wait)

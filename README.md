@@ -65,6 +65,10 @@ Other environment variables:
   running from a non-editable pip install, since the skill lives outside the
   Python package (see `tests/llm-review/main.fmf` for how the tmt test sets
   this).
+- `LLM_REVIEW_MAX_RETRIES`: how many times to retry an API-level session
+  failure (rate limit, network blip, ...) with exponential backoff, default
+  `2` (3 attempts total). A malformed/missing report or a setup failure
+  (e.g. no Koji artifacts) is never retried, since retrying wouldn't help.
 
 ## Usage
 
