@@ -64,6 +64,16 @@ def _issue_counts_note(issue_counts: dict[str, int]) -> str | None:
     return "issues: " + ", ".join(parts) if parts else None
 
 
+def _session_metadata_note(review: ReviewResult) -> str:
+    """Summarize model/cost/duration, e.g. "model: claude-sonnet-5, cost: $0.1234, duration: 270.5s".
+
+    The skill can't report this itself -- it's only known from the SDK's
+    final ResultMessage, after the report has already been written.
+    """
+    cost = f"${review.cost_usd:.4f}" if review.cost_usd is not None else "n/a"
+    return f"model: {review.model or 'unknown'}, cost: {cost}, duration: {review.duration_s:.1f}s"
+
+
 def write_output(
     review: ReviewResult,
     output_dir: Path,
@@ -72,8 +82,9 @@ def write_output(
     """Write ``results.yaml`` + report/logs into ``output_dir``. Return the Result."""
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    metadata_note = _session_metadata_note(review)
     report_path = output_dir / REPORT_FILENAME
-    report_path.write_text(review.report)
+    report_path.write_text(f"{review.report.rstrip()}\n\n---\n\n*{metadata_note}*\n")
 
     log_names = [REPORT_FILENAME]
     for log in extra_logs or []:
@@ -86,6 +97,7 @@ def write_output(
     note = [f"verdict: {review.verdict}"]
     if issues_note := _issue_counts_note(review.issue_counts):
         note.append(issues_note)
+    note.append(metadata_note)
     data = [
         {
             "name": "/",

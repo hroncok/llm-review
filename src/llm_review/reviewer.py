@@ -82,6 +82,9 @@ class ReviewResult:
     verdict: str
     transcript: str
     issue_counts: dict[str, int]
+    model: str | None = None
+    cost_usd: float | None = None
+    duration_s: float = 0.0
 
 
 def _extract_verdict(report: str) -> str:
@@ -163,8 +166,12 @@ async def _run(
     )
 
     transcript_parts: list[str] = []
+    model: str | None = None
+    cost_usd: float | None = None
+    duration_s = 0.0
     async for message in query(prompt=PROMPT, options=options):
         if isinstance(message, AssistantMessage):
+            model = message.model
             for block in message.content:
                 if isinstance(block, TextBlock):
                     transcript_parts.append(block.text)
@@ -177,10 +184,14 @@ async def _run(
         elif isinstance(message, ResultMessage):
             if message.is_error:
                 raise ReviewError(f"Claude session ended in error: {_result_error_text(message)}")
+            cost_usd = message.total_cost_usd
+            duration_s = message.duration_ms / 1000
             logger.info(
-                "Session finished in %d turn(s), %.1fs",
+                "Session finished in %d turn(s), %.1fs, $%.4f (model=%s)",
                 message.num_turns,
-                message.duration_ms / 1000,
+                duration_s,
+                cost_usd or 0.0,
+                model,
             )
 
     if not output_path.exists():
@@ -193,6 +204,9 @@ async def _run(
         verdict=verdict,
         transcript="\n\n".join(transcript_parts),
         issue_counts=_count_issues(report),
+        model=model,
+        cost_usd=cost_usd,
+        duration_s=duration_s,
     )
 
 

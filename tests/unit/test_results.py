@@ -49,22 +49,42 @@ def test_write_output_pass(tmp_path: Path):
         verdict="approve",
         transcript="",
         issue_counts=NO_ISSUES,
+        model="claude-sonnet-5",
+        cost_usd=0.1234,
+        duration_s=270.5,
     )
     output_dir = tmp_path / "out"
 
     result = write_output(review, output_dir)
 
     assert result is Result.PASS
-    assert (output_dir / "review.md").read_text() == review.report
+    written_report = (output_dir / "review.md").read_text()
+    assert written_report.startswith(review.report)
+    assert "model: claude-sonnet-5, cost: $0.1234, duration: 270.5s" in written_report
     data = yaml.safe_load((output_dir / RESULTS_FILENAME).read_text())
     assert data == [
         {
             "name": "/",
             "result": "pass",
-            "note": ["verdict: approve"],
+            "note": [
+                "verdict: approve",
+                "model: claude-sonnet-5, cost: $0.1234, duration: 270.5s",
+            ],
             "log": ["review.md"],
         }
     ]
+
+
+def test_write_output_unknown_model_and_cost(tmp_path: Path):
+    review = ReviewResult(
+        report="report", verdict="approve", transcript="", issue_counts=NO_ISSUES
+    )
+    output_dir = tmp_path / "out"
+
+    write_output(review, output_dir)
+
+    data = yaml.safe_load((output_dir / RESULTS_FILENAME).read_text())
+    assert "model: unknown, cost: n/a, duration: 0.0s" in data[0]["note"]
 
 
 def test_write_output_approve_with_minor_issues_notes_them(tmp_path: Path):
@@ -79,7 +99,7 @@ def test_write_output_approve_with_minor_issues_notes_them(tmp_path: Path):
     write_output(review, output_dir)
 
     data = yaml.safe_load((output_dir / RESULTS_FILENAME).read_text())
-    assert data[0]["note"] == ["verdict: approve", "issues: 2 minor"]
+    assert data[0]["note"][:2] == ["verdict: approve", "issues: 2 minor"]
 
 
 def test_write_output_includes_extra_logs(tmp_path: Path):
