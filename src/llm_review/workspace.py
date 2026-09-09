@@ -60,6 +60,23 @@ def install_skill(workdir: Path, skill_source: Path) -> None:
     shutil.copytree(skill_source, dest, dirs_exist_ok=True)
 
 
+def ensure_has_rpm_artifacts(artifacts_dir: Path, task_id: str) -> None:
+    """Raise ``WorkspaceError`` if ``artifacts_dir`` has no ``.rpm`` files.
+
+    Checked deterministically, before ever invoking the LLM: reviewing an
+    empty artifact set isn't a legitimate "needs discussion" outcome, it's a
+    setup failure (e.g. the task's output expired, or the build never
+    produced RPMs) and should be reported as one.
+    """
+    if not any(artifacts_dir.glob("*.rpm")):
+        raise WorkspaceError(
+            f"Koji task {task_id} has no RPM artifacts to download "
+            "(no .rpm files in the task output) -- there is nothing to review, "
+            "e.g. because the task's output has expired or the build failed "
+            "before producing any RPMs"
+        )
+
+
 def prepare(
     workdir: Path,
     task_id: str,
@@ -73,4 +90,6 @@ def prepare(
     taskinfo = koji.fetch_taskinfo(task_id, profile=koji_profile)
     (workdir / "koji-taskinfo.txt").write_text(taskinfo)
 
-    koji.download_artifacts(task_id, workdir / "artifacts", profile=koji_profile)
+    artifacts_dir = workdir / "artifacts"
+    koji.download_artifacts(task_id, artifacts_dir, profile=koji_profile)
+    ensure_has_rpm_artifacts(artifacts_dir, task_id)

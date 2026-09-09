@@ -25,20 +25,25 @@ class Result(Enum):
     INFO = "info"
     FAIL = "fail"
     PASS = "pass"
+    ERROR = "error"
 
 
 VERDICT_TO_RESULT: dict[str, Result] = {
     "approve": Result.PASS,
     "needs fixes": Result.FAIL,
     "needs discussion": Result.INFO,
+    "error": Result.ERROR,
 }
 
 # Exit code Result.value -> process exit code. Only a hard "needs fixes"
 # blocks; "needs discussion" surfaces for a human without failing the job.
+# "error" means the review could not be performed at all (e.g. no artifacts
+# to inspect), which is a setup/infra failure, not a review outcome.
 RESULT_TO_EXIT_CODE: dict[Result, int] = {
     Result.PASS: 0,
     Result.INFO: 0,
     Result.FAIL: 1,
+    Result.ERROR: 2,
 }
 
 
@@ -94,6 +99,40 @@ def write_output(
         yaml.dump(data, fp)
 
     return result
+
+
+def write_error(
+    output_dir: Path,
+    message: str,
+    extra_logs: list[Path] | None = None,
+) -> Result:
+    """Write a tmt "error" result for when the review couldn't be performed.
+
+    Distinct from a "needs discussion" verdict: that implies the LLM actually
+    reviewed something and has a substantive opinion. This is for cases like
+    a Koji task with no RPM artifacts at all, where there is nothing to
+    review and no LLM session is even run.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    log_names = []
+    for log in extra_logs or []:
+        if log.exists():
+            shutil.copy(log, output_dir / log.name)
+            log_names.append(log.name)
+
+    data = [
+        {
+            "name": "/",
+            "result": Result.ERROR.value,
+            "note": message,
+            "log": log_names,
+        }
+    ]
+    with (output_dir / RESULTS_FILENAME).open("w") as fp:
+        yaml.dump(data, fp)
+
+    return Result.ERROR
 
 
 def exit_code_for(result: Result) -> int:

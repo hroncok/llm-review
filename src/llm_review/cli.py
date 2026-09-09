@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import koji, workspace
 from .config import ConfigError, load_backend_config
-from .results import exit_code_for, write_output
+from .results import exit_code_for, write_error, write_output
 from .reviewer import ReviewError, run_review
 
 logging.basicConfig(level=os.environ.get("LLM_REVIEW_LOG_LEVEL", "INFO"))
@@ -77,18 +77,30 @@ def main(argv: list[str] | None = None) -> int:
 
     def do_review(workdir: Path) -> int:
         workdir.mkdir(parents=True, exist_ok=True)
+        output_dir = args.output_dir.resolve()
 
         logger.info("Preparing workspace in %s for Koji task %s", workdir, task_id)
-        workspace.prepare(workdir, task_id, koji_profile=args.koji_profile)
+        try:
+            workspace.prepare(workdir, task_id, koji_profile=args.koji_profile)
+        except workspace.WorkspaceError as exc:
+            logger.error("%s", exc)
+            result = write_error(
+                output_dir, str(exc), extra_logs=[workdir / "koji-taskinfo.txt"]
+            )
+            logger.info("Results written to %s", output_dir)
+            return exit_code_for(result)
 
         logger.info("Running review with backend=%s model=%s", backend.backend, backend.model)
         try:
             review = run_review(workdir, backend, workdir / "review-output.md")
         except ReviewError as exc:
             logger.error("Review failed: %s", exc)
-            return 1
+            result = write_error(
+                output_dir, str(exc), extra_logs=[workdir / "koji-taskinfo.txt"]
+            )
+            logger.info("Results written to %s", output_dir)
+            return exit_code_for(result)
 
-        output_dir = args.output_dir.resolve()
         result = write_output(
             review,
             output_dir,

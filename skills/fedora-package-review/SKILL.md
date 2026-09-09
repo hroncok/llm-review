@@ -61,6 +61,16 @@ here (those are COPR fedora-review-service artifacts and don't exist for a
 plain Koji scratch build) -- you will generate the rpmlint equivalent yourself
 in Step 3, and do license verification manually in Step 5.
 
+**If you cannot actually perform the review** -- e.g. the SRPM is missing,
+corrupted, or fails to extract; no spec file can be found; the source tarball
+referenced by the spec is missing or unreadable; or any other reason makes it
+impossible to check the package against the guidelines -- stop and use the
+`error` verdict (see Step 7). Do not guess, do not silently skip the checks
+you couldn't perform, and do not fall back to `needs discussion`: `needs
+discussion` means you *did* review the package and have a substantive,
+genuinely ambiguous call to make; `error` means the review itself could not
+be carried out.
+
 ## Step 3: Inspect RPMs and Run rpmlint
 
 ```bash
@@ -165,12 +175,17 @@ of retrieving your result, so do not skip this:
 
 ### VERDICT
 
-<approve / needs fixes / needs discussion>
+<approve / needs fixes / needs discussion / error>
 ```
 
 The `### VERDICT` line must contain exactly one of `approve`, `needs fixes`,
-or `needs discussion` -- the caller parses this line programmatically to
-decide the CI result.
+`needs discussion`, or `error` -- the caller parses this line programmatically
+to decide the CI result.
+
+Use `error` when the review could not actually be performed (see "If you
+cannot actually perform the review" above) -- in that case, the ### PASS and
+### ISSUES sections should explain what's missing/broken instead of listing
+guideline checks, since none could be run.
 
 ## Key Principles
 
@@ -180,3 +195,4 @@ decide the CI result.
 4. **Explain false positives.** When rpmlint flags something that is actually correct, explain why.
 5. **Check build logs.** Verify tests ran and passed, not just that the build succeeded.
 6. **Always write the report to `$REVIEW_OUTPUT_PATH`.** This is a non-interactive run; nothing you say outside that file is recoverable by the caller.
+7. **Use `error`, not `needs discussion`, when you can't review at all.** `needs discussion` implies you completed the review and have a genuine judgment call to flag; `error` means the review itself couldn't be carried out.

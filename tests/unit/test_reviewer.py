@@ -16,6 +16,7 @@ from llm_review.reviewer import (
         ("### VERDICT\n\napprove\n", "approve"),
         ("### VERDICT\nneeds fixes\n", "needs fixes"),
         ("### VERDICT\n\nNeeds Discussion\n", "needs discussion"),
+        ("### VERDICT\n\nError\n", "error"),
         ("## Package Review: foo 1-1\n\n...\n\n### VERDICT\n\napprove\n", "approve"),
     ],
 )

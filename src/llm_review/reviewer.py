@@ -35,11 +35,11 @@ PROMPT = (
 )
 
 _VERDICT_RE = re.compile(
-    r"###\s*VERDICT\s*\n+\s*(approve|needs fixes|needs discussion)",
+    r"###\s*VERDICT\s*\n+\s*(approve|needs fixes|needs discussion|error)",
     re.IGNORECASE,
 )
 
-VERDICTS = ("approve", "needs fixes", "needs discussion")
+VERDICTS = ("approve", "needs fixes", "needs discussion", "error")
 
 _ISSUES_SECTION_RE = re.compile(
     r"###\s*ISSUES\s*\n(.*?)(?=\n###\s|\Z)", re.IGNORECASE | re.DOTALL
