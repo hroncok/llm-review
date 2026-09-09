@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,12 +13,20 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     ResultMessage,
     TextBlock,
+    ToolUseBlock,
     query,
 )
 
 from .config import BackendConfig
 
+logger = logging.getLogger(__name__)
+
 SKILL_NAME = "fedora-package-review"
+
+# Tool input keys worth showing as a one-line progress indicator, in order of
+# preference (Bash's "command", Read/Glob's "file_path"/"path", Grep's
+# "pattern").
+_TOOL_INPUT_PREVIEW_KEYS = ("command", "file_path", "pattern", "path")
 
 PROMPT = (
     "Use the fedora-package-review skill to review the Fedora package build "
@@ -75,6 +84,18 @@ def _count_issues(report: str) -> dict[str, int]:
     return counts
 
 
+def _truncate(text: str, limit: int = 200) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _tool_use_preview(block: ToolUseBlock) -> str:
+    for key in _TOOL_INPUT_PREVIEW_KEYS:
+        if key in block.input:
+            return _truncate(str(block.input[key]))
+    return _truncate(str(block.input)) if block.input else ""
+
+
 async def _run(
     workdir: Path,
     backend: BackendConfig,
@@ -95,8 +116,20 @@ async def _run(
             for block in message.content:
                 if isinstance(block, TextBlock):
                     transcript_parts.append(block.text)
-        elif isinstance(message, ResultMessage) and message.is_error:
-            raise ReviewError(f"Claude session ended in error: {message.subtype}")
+                    logger.info("Claude: %s", _truncate(block.text))
+                elif isinstance(block, ToolUseBlock):
+                    preview = _tool_use_preview(block)
+                    logger.info(
+                        "Tool call: %s%s", block.name, f"({preview})" if preview else ""
+                    )
+        elif isinstance(message, ResultMessage):
+            if message.is_error:
+                raise ReviewError(f"Claude session ended in error: {message.subtype}")
+            logger.info(
+                "Session finished in %d turn(s), %.1fs",
+                message.num_turns,
+                message.duration_ms / 1000,
+            )
 
     if not output_path.exists():
         raise ReviewError(f"Skill did not write a report to {output_path}")

@@ -1,6 +1,13 @@
 import pytest
+from claude_agent_sdk import ToolUseBlock
 
-from llm_review.reviewer import ReviewError, _count_issues, _extract_verdict
+from llm_review.reviewer import (
+    ReviewError,
+    _count_issues,
+    _extract_verdict,
+    _tool_use_preview,
+    _truncate,
+)
 
 
 @pytest.mark.parametrize(
@@ -52,3 +59,37 @@ def test_count_issues_missing_section():
         "should-fix": 0,
         "minor": 0,
     }
+
+
+def test_truncate_short_text_unchanged():
+    assert _truncate("short text") == "short text"
+
+
+def test_truncate_collapses_whitespace():
+    assert _truncate("a  b\n\nc\td") == "a b c d"
+
+
+def test_truncate_long_text_gets_ellipsis():
+    text = "x" * 300
+    result = _truncate(text, limit=50)
+    assert len(result) == 50
+    assert result.endswith("…")
+
+
+@pytest.mark.parametrize(
+    ("name", "tool_input", "expected"),
+    [
+        ("Bash", {"command": "rpmlint  foo.spec   bar.rpm"}, "rpmlint foo.spec bar.rpm"),
+        ("Read", {"file_path": "/tmp/foo/bar.spec"}, "/tmp/foo/bar.spec"),
+        ("Grep", {"pattern": "License:"}, "License:"),
+        ("Skill", {}, ""),
+    ],
+)
+def test_tool_use_preview(name, tool_input, expected):
+    block = ToolUseBlock(id="1", name=name, input=tool_input)
+    assert _tool_use_preview(block) == expected
+
+
+def test_tool_use_preview_falls_back_to_repr_for_unknown_keys():
+    block = ToolUseBlock(id="1", name="SomeTool", input={"weird_key": "value"})
+    assert "weird_key" in _tool_use_preview(block)
