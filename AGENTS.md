@@ -202,7 +202,13 @@ present, falling back to `subtype` otherwise; keep using it rather than
 - **When a commit is a fixup for something just committed in the same
   session** (a bug found in, or a change of approach to, work from a commit
   earlier in the same conversation) — ask the user whether it should be a
-  new commit or amended/squashed into the one it's fixing, rather than
-  assuming either way. Don't use `git commit --amend` or squash on your own
-  initiative without asking first, even if it seems obviously right; do
-  follow through promptly once they say which they want.
+  new commit or a fixup for an earlier one, rather than assuming either way.
+  When they want a fixup, use `git commit --fixup=<hash>` and stop there —
+  do **not** run `git rebase --autosquash`, `git reset --soft` +
+  recommit, a detached-HEAD checkout/amend/`rebase --onto` dance, or any
+  other history rewriting on your own initiative, even non-interactive
+  rewriting. The user squashes it themselves when they're ready; your job
+  ends at creating the `fixup!` commit. (Previously handled a fixup for a
+  non-tip commit via a manual detached-HEAD amend + `rebase --onto` — it
+  worked, but the user didn't want that; `--fixup` is the only sanctioned
+  tool here, tip commit or not.)
