@@ -156,6 +156,18 @@ list must always include `"Skill"` whenever `skills=` is set. Caught by
 watching a live run's tool-call log and seeing `find`/manual `Read` calls
 hunting for the skill file instead of a `Skill` tool call.
 
+## SDK gotcha: `ResultMessage.subtype` can lie when `is_error` is set
+
+An API-level failure (rate limit, auth, transient error, ...) arrives as a
+`ResultMessage` with `subtype == "success"` (sic), `is_error == True`, and
+the actual error text in `result` instead. Terminal errors the CLI raises
+itself (`error_max_turns`, `error_during_execution`, ...) do put useful text
+in `subtype`. Using `subtype` unconditionally when `is_error` is set
+produces a self-contradictory message like "Claude session ended in error:
+success" — seen live. `reviewer._result_error_text()` prefers `result` when
+present, falling back to `subtype` otherwise; keep using it rather than
+`message.subtype` directly.
+
 ## Testing
 
 - `tests/unit/` — pytest, **pure logic only, no network or LLM calls**

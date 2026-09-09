@@ -113,6 +113,21 @@ def _tool_use_preview(block: ToolUseBlock) -> str:
     return _truncate(str(block.input)) if block.input else ""
 
 
+def _result_error_text(message: ResultMessage) -> str:
+    """Best-effort human-readable text for a failed ResultMessage.
+
+    An API-level failure (rate limit, auth, ...) arrives with
+    ``subtype == "success"`` (sic) and the actual error text in ``result``;
+    using ``subtype`` alone there produces a self-contradictory message like
+    "Claude session ended in error: success". Prefer ``result`` when it's
+    actually populated, falling back to ``subtype`` for terminal errors the
+    CLI reports directly (``error_max_turns``, ``error_during_execution``, ...).
+    """
+    if message.result:
+        return message.result
+    return message.subtype
+
+
 async def _run(
     workdir: Path,
     backend: BackendConfig,
@@ -141,7 +156,7 @@ async def _run(
                     )
         elif isinstance(message, ResultMessage):
             if message.is_error:
-                raise ReviewError(f"Claude session ended in error: {message.subtype}")
+                raise ReviewError(f"Claude session ended in error: {_result_error_text(message)}")
             logger.info(
                 "Session finished in %d turn(s), %.1fs",
                 message.num_turns,

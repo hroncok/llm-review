@@ -1,13 +1,26 @@
 import pytest
-from claude_agent_sdk import ToolUseBlock
+from claude_agent_sdk import ResultMessage, ToolUseBlock
 
 from llm_review.reviewer import (
     ReviewError,
     _count_issues,
     _extract_verdict,
+    _result_error_text,
     _tool_use_preview,
     _truncate,
 )
+
+
+def _result_message(**overrides) -> ResultMessage:
+    defaults = {
+        "subtype": "success",
+        "duration_ms": 100,
+        "duration_api_ms": 100,
+        "is_error": True,
+        "num_turns": 1,
+        "session_id": "test-session",
+    }
+    return ResultMessage(**{**defaults, **overrides})
 
 
 @pytest.mark.parametrize(
@@ -120,3 +133,16 @@ def test_tool_use_preview(name, tool_input, expected):
 def test_tool_use_preview_falls_back_to_repr_for_unknown_keys():
     block = ToolUseBlock(id="1", name="SomeTool", input={"weird_key": "value"})
     assert "weird_key" in _tool_use_preview(block)
+
+
+def test_result_error_text_prefers_result_over_success_subtype():
+    # Real-world case: an API failure arrives as subtype "success" with the
+    # actual error text in `result` -- using subtype alone here produces the
+    # self-contradictory "ended in error: success".
+    message = _result_message(subtype="success", result="API Error: rate limited")
+    assert _result_error_text(message) == "API Error: rate limited"
+
+
+def test_result_error_text_falls_back_to_subtype_when_no_result():
+    message = _result_message(subtype="error_max_turns", result=None)
+    assert _result_error_text(message) == "error_max_turns"
