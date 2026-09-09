@@ -38,8 +38,16 @@ def test_exit_code_for(result, code):
     assert exit_code_for(result) == code
 
 
+NO_ISSUES = {"blocker": 0, "should-fix": 0, "minor": 0}
+
+
 def test_write_output_pass(tmp_path: Path):
-    review = ReviewResult(report="## report\n### VERDICT\n\napprove\n", verdict="approve", transcript="")
+    review = ReviewResult(
+        report="## report\n### VERDICT\n\napprove\n",
+        verdict="approve",
+        transcript="",
+        issue_counts=NO_ISSUES,
+    )
     output_dir = tmp_path / "out"
 
     result = write_output(review, output_dir)
@@ -51,14 +59,31 @@ def test_write_output_pass(tmp_path: Path):
         {
             "name": "/",
             "result": "pass",
-            "note": ["verdict: approve"],
+            "note": "verdict: approve",
             "log": ["review.md"],
         }
     ]
 
 
+def test_write_output_approve_with_minor_issues_notes_them(tmp_path: Path):
+    review = ReviewResult(
+        report="report",
+        verdict="approve",
+        transcript="",
+        issue_counts={"blocker": 0, "should-fix": 0, "minor": 2},
+    )
+    output_dir = tmp_path / "out"
+
+    write_output(review, output_dir)
+
+    data = yaml.safe_load((output_dir / RESULTS_FILENAME).read_text())
+    assert data[0]["note"] == "verdict: approve; issues: 2 minor"
+
+
 def test_write_output_includes_extra_logs(tmp_path: Path):
-    review = ReviewResult(report="report", verdict="needs fixes", transcript="")
+    review = ReviewResult(
+        report="report", verdict="needs fixes", transcript="", issue_counts=NO_ISSUES
+    )
     extra_log = tmp_path / "koji-taskinfo.txt"
     extra_log.write_text("some log content")
     output_dir = tmp_path / "out"
@@ -70,7 +95,9 @@ def test_write_output_includes_extra_logs(tmp_path: Path):
 
 
 def test_write_output_skips_missing_extra_logs(tmp_path: Path):
-    review = ReviewResult(report="report", verdict="needs discussion", transcript="")
+    review = ReviewResult(
+        report="report", verdict="needs discussion", transcript="", issue_counts=NO_ISSUES
+    )
     missing_log = tmp_path / "does-not-exist.txt"
     output_dir = tmp_path / "out"
 

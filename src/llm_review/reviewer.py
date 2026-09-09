@@ -32,6 +32,13 @@ _VERDICT_RE = re.compile(
 
 VERDICTS = ("approve", "needs fixes", "needs discussion")
 
+_ISSUES_SECTION_RE = re.compile(
+    r"###\s*ISSUES\s*\n(.*?)(?=\n###\s|\Z)", re.IGNORECASE | re.DOTALL
+)
+_ISSUE_CATEGORY_RE = re.compile(r"\*\*(Blocker|Should-fix|Minor)\*\*", re.IGNORECASE)
+
+ISSUE_CATEGORIES = ("blocker", "should-fix", "minor")
+
 
 class ReviewError(RuntimeError):
     """Raised when the review session fails or produces no usable report."""
@@ -42,6 +49,7 @@ class ReviewResult:
     report: str
     verdict: str
     transcript: str
+    issue_counts: dict[str, int]
 
 
 def _extract_verdict(report: str) -> str:
@@ -49,6 +57,22 @@ def _extract_verdict(report: str) -> str:
     if not match:
         raise ReviewError("Could not find a '### VERDICT' line in the review report")
     return match.group(1).lower()
+
+
+def _count_issues(report: str) -> dict[str, int]:
+    """Count issues per category (blocker/should-fix/minor) in the ### ISSUES section.
+
+    A verdict of "approve" can still come with minor (or should-fix) issues
+    noted -- these counts let callers surface that instead of collapsing
+    everything down to the verdict alone.
+    """
+    counts = dict.fromkeys(ISSUE_CATEGORIES, 0)
+    section_match = _ISSUES_SECTION_RE.search(report)
+    if not section_match:
+        return counts
+    for match in _ISSUE_CATEGORY_RE.finditer(section_match.group(1)):
+        counts[match.group(1).lower()] += 1
+    return counts
 
 
 async def _run(
@@ -83,6 +107,7 @@ async def _run(
         report=report,
         verdict=verdict,
         transcript="\n\n".join(transcript_parts),
+        issue_counts=_count_issues(report),
     )
 
 

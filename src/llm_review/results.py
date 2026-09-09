@@ -49,6 +49,16 @@ def result_for_verdict(verdict: str) -> Result:
         raise ValueError(f"Unknown verdict {verdict!r}") from exc
 
 
+def _issue_counts_note(issue_counts: dict[str, int]) -> str | None:
+    """Summarize non-zero issue counts, e.g. "issues: 1 blocker, 2 minor".
+
+    Lets an "approve" verdict with minor (or should-fix) issues still show
+    that something was flagged, instead of collapsing to just the verdict.
+    """
+    parts = [f"{count} {category}" for category, count in issue_counts.items() if count]
+    return "issues: " + ", ".join(parts) if parts else None
+
+
 def write_output(
     review: ReviewResult,
     output_dir: Path,
@@ -67,11 +77,16 @@ def write_output(
             log_names.append(log.name)
 
     result = result_for_verdict(review.verdict)
+    # tmt's result_note schema declares a single string, not a list -- see
+    # https://tmt.readthedocs.io/en/stable/spec/plans.html#execute
+    note = f"verdict: {review.verdict}"
+    if issues_note := _issue_counts_note(review.issue_counts):
+        note += f"; {issues_note}"
     data = [
         {
             "name": "/",
             "result": result.value,
-            "note": [f"verdict: {review.verdict}"],
+            "note": note,
             "log": log_names,
         }
     ]
