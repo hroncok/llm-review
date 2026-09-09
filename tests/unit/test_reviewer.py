@@ -105,9 +105,24 @@ def test_count_issues_ignores_negation_prose_elsewhere_in_report():
     assert _count_issues(report) == {"blocker": 0, "should-fix": 0, "minor": 2}
 
 
-def test_count_issues_missing_summary_section_defaults_to_zero():
+def test_count_issues_missing_summary_falls_back_to_counting_issues_list():
+    # Real-world case: the model omitted ### SUMMARY entirely despite it
+    # being "mandatory" -- fall back to counting ### ISSUES list items
+    # instead of silently reporting all zeros.
     report = "### ISSUES\n\n1. **Blocker**: something bad\n\n### VERDICT\n\nneeds fixes\n"
-    assert _count_issues(report) == {"blocker": 0, "should-fix": 0, "minor": 0}
+    assert _count_issues(report) == {"blocker": 1, "should-fix": 0, "minor": 0}
+
+
+def test_count_issues_fallback_tolerates_extended_labels():
+    # Real-world case: the model wrote "**Minor / informational**" and
+    # "**Minor / pre-existing**" instead of the bare "**Minor**" label.
+    report = (
+        "### ISSUES\n\n"
+        "1. **Minor / informational**: false positive\n"
+        "2. **Minor / pre-existing**: not part of this change\n\n"
+        "### VERDICT\n\napprove\n"
+    )
+    assert _count_issues(report) == {"blocker": 0, "should-fix": 0, "minor": 2}
 
 
 def test_count_issues_missing_section():
