@@ -106,7 +106,7 @@ async def _run(
         env={**backend.env, "REVIEW_OUTPUT_PATH": str(output_path)},
         model=backend.model,
         skills=[SKILL_NAME],
-        tools=["Bash", "Read", "Grep", "Glob"],
+        tools=["Bash", "Read", "Grep", "Glob", "Skill"],
         permission_mode="bypassPermissions",
     )
 

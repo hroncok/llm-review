@@ -140,6 +140,21 @@ as package data via `[tool.hatch.build.targets.wheel.force-include]` in
 actual non-editable install from a fresh venv, not just the dev `.venv`
 (editable installs mask this class of bug).
 
+## SDK gotcha: `tools` vs `allowed_tools`/`skills`
+
+`ClaudeAgentOptions.tools` (→ CLI `--tools`) is the *base set of available
+built-in tools* — anything not listed is entirely unavailable, full stop.
+`ClaudeAgentOptions.allowed_tools`/`skills` (→ CLI `--allowedTools`) only
+*pre-approves permission* for tools that are already in that base set; it
+cannot add a tool the base set excludes. Setting `skills=[SKILL_NAME]`
+without also including `"Skill"` in `tools` silently makes the `Skill` tool
+unavailable, so the model never formally invokes the skill — it just
+happens to `find`/`Read` `SKILL.md` on its own initiative (which is why
+things still mostly worked, misleadingly). `reviewer._run()`'s `tools=`
+list must always include `"Skill"` whenever `skills=` is set. Caught by
+watching a live run's tool-call log and seeing `find`/manual `Read` calls
+hunting for the skill file instead of a `Skill` tool call.
+
 ## Testing
 
 - `tests/unit/` — pytest, **pure logic only, no network or LLM calls**
