@@ -1,0 +1,20 @@
+/:
+  inherit: false
+
+/run-llm-review:
+  summary: Run the AI-powered package review
+  duration: 30m
+  description: |
+    Requires KOJI_TASK_ID (Koji scratch-build task ID) and the backend
+    environment variables documented in llm-review's README (Google Vertex
+    AI or Amazon Bedrock credentials/config).
+  require:
+    - koji
+    - git
+    - rpm
+    - rpmlint
+    - python3-pip
+  test: |
+    pip install --no-cache-dir "$TMT_TREE"
+    LLM_REVIEW_SKILL_DIR="$TMT_TREE/skills/fedora-package-review" python3 -m llm_review
+  result: custom

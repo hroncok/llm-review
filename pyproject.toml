@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "llm-review"
+version = "0.1.0"
+description = "AI-powered Fedora package review for Fedora CI, driven by the fedora-package-review Claude Code skill"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "claude-agent-sdk",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+llm-review = "llm_review.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/llm_review"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]

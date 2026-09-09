@@ -1,0 +1,16 @@
+summary: Run an AI-powered Fedora package review
+
+description: |
+  Reviews a Koji scratch build against the Fedora Packaging Guidelines using
+  the fedora-package-review Claude Code skill, run headlessly through the
+  Claude Agent SDK.
+
+# No mock/build tooling involved (unlike fedora-review), so a plain container
+# is enough.
+provision:
+  how: container
+  image: fedora:latest
+
+discover:
+  how: fmf
+  test: /tests/llm-review
