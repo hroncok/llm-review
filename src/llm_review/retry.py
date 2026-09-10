@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import subprocess
 import time
 from collections.abc import Callable
@@ -31,6 +32,7 @@ def run_with_retry(
     """
     for attempt in range(max_retries + 1):
         try:
+            logger.info("Running: %s", shlex.join(cmd))
             return subprocess.run(cmd, check=True, **kwargs)
         except subprocess.CalledProcessError as exc:
             if attempt >= max_retries:

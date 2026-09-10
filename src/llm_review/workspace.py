@@ -97,6 +97,7 @@ def clone_dist_git(workdir: Path, repo_url: str, ref: str) -> None:
         # Local operation once cloned -- not network-dependent, so no retry.
         # `switch -d` (unlike `checkout`) detaches without the noisy "Note:
         # switching to ... you are in 'detached HEAD' state ..." advisory.
+        logger.info("Running: git switch -d %s (in %s)", ref, dest)
         subprocess.run(["git", "switch", "-d", ref], cwd=dest, check=True)
     except subprocess.CalledProcessError:
         shutil.rmtree(dest, ignore_errors=True)

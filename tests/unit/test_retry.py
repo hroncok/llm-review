@@ -87,3 +87,13 @@ def test_run_with_retry_does_not_call_on_retry_when_no_failure(monkeypatch):
     )
 
     assert on_retry_calls == []
+
+
+def test_run_with_retry_logs_the_command(monkeypatch, caplog):
+    calls = []
+    monkeypatch.setattr("subprocess.run", _fake_run_factory(0, calls))
+
+    with caplog.at_level("INFO"):
+        run_with_retry(["git", "clone", "https://example.invalid/repo.git", "dest"])
+
+    assert "Running: git clone https://example.invalid/repo.git dest" in caplog.text
