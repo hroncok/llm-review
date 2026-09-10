@@ -11,7 +11,21 @@ from pathlib import Path
 from . import koji
 from .retry import run_with_retry
 
-GUIDELINES_URL = "https://forge.fedoraproject.org/packaging/guidelines.git"
+# Reference repos cloned into the workspace, keyed by the directory name
+# they're cloned into under $WORKDIR (see the skill's "Input" section).
+REPOS_TO_CLONE = {
+    # The Fedora Packaging Guidelines.
+    "guidelines": "https://forge.fedoraproject.org/packaging/guidelines.git",
+    # Fedora Legal's policy docs -- license-field.adoc (how to compose the
+    # License: field) and allowed-licenses.adoc (approval policy).
+    # Separate from, and not covered by, the packaging guidelines above.
+    "legal-docs": "https://gitlab.com/fedora/legal/fedora-legal-docs.git",
+    # A per-license machine-readable database (data/<SPDX-ID>.toml, each
+    # with a `status` field) -- a definitive lookup for whether a specific
+    # license is allowed in Fedora, instead of the model guessing from
+    # memorized knowledge.
+    "license-data": "https://forge.fedoraproject.org/legal/fedora-license-data.git",
+}
 SKILL_NAME = "fedora-package-review"
 
 
@@ -42,14 +56,16 @@ def default_skill_source() -> Path:
     return Path(str(packaged_skill_dir))
 
 
-def clone_guidelines(workdir: Path) -> None:
-    dest = workdir / "guidelines"
-    run_with_retry(
-        ["git", "clone", "--depth", "1", GUIDELINES_URL, str(dest)],
-        # A retry must find `dest` gone, or git fails with "destination path
-        # already exists" instead of actually retrying the clone.
-        on_retry=partial(shutil.rmtree, dest, ignore_errors=True),
-    )
+def clone_repos(workdir: Path) -> None:
+    """Shallow-clone every repo in ``REPOS_TO_CLONE`` into ``workdir``."""
+    for name, url in REPOS_TO_CLONE.items():
+        dest = workdir / name
+        run_with_retry(
+            ["git", "clone", "--depth", "1", url, str(dest)],
+            # A retry must find `dest` gone, or git fails with "destination
+            # path already exists" instead of actually retrying the clone.
+            on_retry=partial(shutil.rmtree, dest, ignore_errors=True),
+        )
 
 
 def install_skill(workdir: Path, skill_source: Path) -> None:
@@ -87,7 +103,7 @@ def prepare(
     koji_profile: str | None = None,
 ) -> None:
     """Set up guidelines, the skill, and Koji artifacts under ``workdir``."""
-    clone_guidelines(workdir)
+    clone_repos(workdir)
     install_skill(workdir, skill_source or default_skill_source())
 
     taskinfo = koji.fetch_taskinfo(task_id, profile=koji_profile)

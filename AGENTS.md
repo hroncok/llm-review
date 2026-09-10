@@ -26,9 +26,11 @@ understand the pipeline:
    dist-git checkout — the skill extracts the spec file from the SRPM
    itself, so there's no need to clone the package's dist-git repo.
 2. **`workspace.py`** — prepares the ephemeral session directory: shallow
-   guidelines clone, skill install, Koji download, and (important — see
-   below) a **deterministic check that the download actually produced RPM
-   files** before ever calling the LLM.
+   clones of the Packaging Guidelines, Fedora Legal's policy docs
+   (`legal-docs`), and the per-license database (`license-data`; see
+   "License verification data sources" below), skill install, Koji
+   download, and (important — see below) a **deterministic check that the
+   download actually produced RPM files** before ever calling the LLM.
 3. **`reviewer.py`** — runs the skill via `claude_agent_sdk.query()`,
    streams progress (assistant text + tool calls) to the log, and parses the
    final report's `### VERDICT` line and `### ISSUES` section.
@@ -76,6 +78,30 @@ Key adaptations from the original:
   change these strings, update `reviewer.VERDICTS`/`_VERDICT_RE` and
   `results.VERDICT_TO_RESULT` in the same change** — they must stay in
   sync, and nothing enforces that automatically.
+
+## License verification data sources
+
+Found live: the model called a `License:` field's SPDX expression
+"redundant" using general reasoning, which was wrong -- License: field
+composition rules are Fedora Legal's, not the Packaging Committee's, and
+aren't in the Packaging Guidelines at all. Two more repos get cloned into
+the workspace for this (`workspace.clone_repos`, via `REPOS_TO_CLONE`):
+
+- `$WORKDIR/legal-docs/` —
+  [`fedora-legal-docs`](https://gitlab.com/fedora/legal/fedora-legal-docs.git).
+  `modules/ROOT/pages/license-field.adoc` has the actual composition rules
+  (AND/OR structure, when a repeated license needs its own clause);
+  `allowed-licenses.adoc` has the approval policy.
+- `$WORKDIR/license-data/` —
+  [`fedora-license-data`](https://forge.fedoraproject.org/legal/fedora-license-data.git).
+  **Not** a docs repo — one `data/<SPDX-ID>.toml` file per license (e.g.
+  `data/MIT.toml`), each with a `status` field (`allowed`, `not-allowed`,
+  ...). A definitive per-license lookup, so the skill doesn't have to guess
+  from memorized knowledge of what Fedora permits.
+
+If you're tempted to point `allowed-licenses.adoc` at `license-data`
+instead of `legal-docs`: don't, that was an initial wrong guess (based on
+the name) corrected by actually cloning both repos and checking.
 
 ## Results semantics — verdict vs. outcome
 

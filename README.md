@@ -13,10 +13,16 @@ structured review report and a Fedora-CI-style result.
 
 1. `llm_review.koji` resolves a Koji task ID (bare, or from a
    `taskinfo?taskID=...` URL, or `$KOJI_TASK_ID`) and downloads its SRPM/RPMs/logs.
-2. `llm_review.workspace` prepares an ephemeral working directory: a shallow
-   clone of the [Fedora Packaging
-   Guidelines](https://forge.fedoraproject.org/packaging/guidelines.git), the
-   adapted skill, and the downloaded artifacts.
+2. `llm_review.workspace` prepares an ephemeral working directory: shallow
+   clones of the [Fedora Packaging
+   Guidelines](https://forge.fedoraproject.org/packaging/guidelines.git),
+   [Fedora Legal's policy
+   docs](https://gitlab.com/fedora/legal/fedora-legal-docs.git) (License:
+   field composition, license approval policy -- not covered by the
+   Packaging Guidelines), and the [per-license
+   database](https://forge.fedoraproject.org/legal/fedora-license-data.git)
+   (definitive allowed/not-allowed status per SPDX license), plus the
+   adapted skill and the downloaded artifacts.
 3. `llm_review.reviewer` runs the skill via the Claude Agent SDK against that
    workspace, and reads back the report the skill is instructed to write.
 4. `llm_review.results` writes the result the way Fedora CI results are

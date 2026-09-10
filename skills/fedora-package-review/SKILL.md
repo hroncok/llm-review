@@ -17,6 +17,12 @@ you start:
 
 - `$WORKDIR/guidelines/` -- a checkout of the Fedora Packaging Guidelines (see
   Step 1).
+- `$WORKDIR/legal-docs/` -- a checkout of Fedora Legal's policy docs (see
+  Step 1 and Step 5) -- covers License: field composition and license
+  approval policy, which the Packaging Guidelines do *not* cover.
+- `$WORKDIR/license-data/` -- a checkout of Fedora's per-license database
+  (see Step 5) -- one `data/<SPDX-ID>.toml` file per license, each with the
+  license's actual Fedora approval `status`.
 - `$WORKDIR/artifacts/` -- the downloaded Koji task output: the SRPM, the built
   RPMs, and (if available) `build.log`/`root.log`/`task.log`.
 - `$WORKDIR/koji-taskinfo.txt` -- the output of `koji taskinfo -v <task-id>`,
@@ -39,6 +45,14 @@ which guideline files to read based on the package type:
 - For Python packages: `Python.adoc`
 - For other languages: the corresponding `<Language>.adoc` file
 - As needed: `SourceURL.adoc`, `Versioning.adoc`, `Conflicts.adoc`, `index.adoc`, etc.
+
+**Also always read** `$WORKDIR/legal-docs/modules/ROOT/pages/license-field.adoc`
+(how to compose the `License:` field -- AND/OR expressions, when a license
+belongs in it at all) and `$WORKDIR/legal-docs/modules/ROOT/pages/allowed-licenses.adoc`
+(the license-approval policy). These are Fedora Legal's rules, not the
+Packaging Committee's, and the Packaging Guidelines above do not cover this
+ground -- do not reason about `License:` field correctness from the
+packaging guidelines alone.
 
 Do not rely on memorized rules. The guidelines change -- always read the
 current files.
@@ -133,7 +147,19 @@ to lean on here -- do this manually.
      - **Warning**: keyword searches (grep for `BSD`, `GPL`, etc.) in minified JS produce many false positives from SPDX validation data modules (like `spdx-license-ids`). These are data strings, not licenses of bundled code. Focus on comment blocks and package metadata instead.
    - For bundled Python code: check source file headers and associated LICENSE files.
 2. **Verify the `License:` field** covers ALL licenses found -- the main project AND all bundled dependencies.
-3. **Check upstream**: if third-party license documentation in the source tree seems incomplete, check the upstream repository's LICENSE file directly.
+3. **Verify the `License:` field's SPDX expression is composed correctly**
+   per `$WORKDIR/legal-docs/modules/ROOT/pages/license-field.adoc` --
+   e.g. whether multiple licenses should be joined with `AND`/`OR`, and
+   whether a license already implied elsewhere in the expression needs its
+   own separate clause. Don't call an expression "redundant" or "wrong"
+   based on general reasoning alone -- check what this specific document
+   says about composing expressions with repeated/overlapping licenses.
+4. **Look up each distinct license found** in
+   `$WORKDIR/license-data/data/<SPDX-ID>.toml` (e.g. `data/MIT.toml`,
+   `data/Apache-2.0.toml`) for its actual Fedora `status` (`allowed`,
+   `not-allowed`, etc.) -- this is the definitive source, not memorized
+   knowledge of which licenses Fedora permits.
+5. **Check upstream**: if third-party license documentation in the source tree seems incomplete, check the upstream repository's LICENSE file directly.
 
 ## Step 6: Review Against Guidelines
 
@@ -222,3 +248,4 @@ should be all zeros in that case).
 6. **Always write the report to `$REVIEW_OUTPUT_PATH`.** This is a non-interactive run; nothing you say outside that file is recoverable by the caller.
 7. **Use `error`, not `needs discussion`, when you can't review at all.** `needs discussion` implies you completed the review and have a genuine judgment call to flag; `error` means the review itself couldn't be carried out.
 8. **Never omit the `### SUMMARY` section, and make its counts exact.** It is as mandatory as `### VERDICT` -- the caller trusts these numbers instead of re-parsing `### ISSUES`, so they must match the numbered list exactly, with no line omitted even when its count is `0`.
+9. **Never judge `License:` field composition from general reasoning.** Whether an SPDX expression's `AND`/`OR` structure or a repeated license clause is correct is governed by `legal-docs/license-field.adoc`, not the Packaging Guidelines and not what "looks redundant" -- read that document before flagging anything about the `License:` field.
