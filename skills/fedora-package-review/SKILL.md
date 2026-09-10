@@ -37,8 +37,7 @@ you start:
   Neither case is an error; proceed without it, just without rpmlintrc
   discovery (see Step 3).
 
-You do not need to download anything yourself, and there is no Bugzilla or
-COPR involved -- do not attempt to use the `copr` or `bugzilla` CLIs.
+You do not need to download anything yourself.
 
 ## Step 1: Read the Guidelines
 
@@ -94,10 +93,8 @@ log, and it matters:
   (`noarch`) is what matters, and there's exactly one such log regardless
   of how many RPMs get built from it.
 
-There is no `review.txt`, `rpmlint.txt`, or `licensecheck.txt` pre-generated
-here (those are COPR fedora-review-service artifacts and don't exist for a
-plain Koji scratch build) -- you will generate the rpmlint equivalent yourself
-in Step 3, and do license verification manually in Step 5.
+You will run rpmlint yourself in Step 3, and do license verification
+manually in Step 5.
 
 **If you cannot actually perform the review** -- e.g. the SRPM is missing,
 corrupted, or fails to extract; no spec file can be found; the source tarball
@@ -145,8 +142,7 @@ Otherwise (no `dist-git/`, or no config file in it), run it plainly:
 rpmlint "$WORKDIR/artifacts/"*.spec "$WORKDIR/artifacts/"*.rpm
 ```
 
-Treat this output the same way the interactive skill treats `rpmlint.txt`:
-explain every warning/error, and note which ones are false positives. If a
+Explain every warning/error, and note which ones are false positives. If a
 project's own `.rpmlintrc` suppresses a warning, don't re-flag it as an
 issue -- that's the maintainer's deliberate, checked-in call.
 
@@ -165,8 +161,7 @@ Then inspect license files, bundled code, and embedded metadata.
 
 ## Step 5: License Verification
 
-This is the most error-prone area, and there is no automated `licensecheck.txt`
-to lean on here -- do this manually.
+This is the most error-prone area -- do this manually.
 
 1. **Inspect bundled/vendored code manually**:
    - Check all `LICENSE*`, `COPYING*`, `NOTICE*` files in the source tree.
@@ -287,7 +282,7 @@ should be all zeros in that case).
 ## Key Principles
 
 1. **Read the guidelines first.** They are the source of truth and they change. Always read the current `.adoc` files.
-2. **Verify licenses manually.** There is no automated licensecheck output here; bundled/minified code needs manual inspection.
+2. **Verify licenses manually.** Bundled/minified code needs manual inspection.
 3. **Distinguish MUST from SHOULD.** Only MUST violations block approval.
 4. **Explain false positives.** When rpmlint flags something that is actually correct, explain why.
 5. **Check build logs -- but not the `*.srpm.log` one.** Verify tests ran and passed using a real `buildArch` log (`build.<label>.log` where `<label>` isn't `srpm`), not just that the build succeeded.
