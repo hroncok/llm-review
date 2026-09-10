@@ -29,6 +29,13 @@ you start:
   `<label>` means and why `srpm`-labeled logs are not a real build log.
 - `$WORKDIR/koji-taskinfo.txt` -- the output of `koji taskinfo -v <task-id>`,
   for context (package NVR, build target, owner, etc).
+- `$WORKDIR/dist-git/` -- *if* the build came from an SCM source (the normal
+  case for a PR-triggered scratch build), a checkout of the dist-git repo at
+  the exact commit used for this build. **Not always present** -- absent for
+  a task with no SCM source, or if that exact commit could no longer be
+  checked out (e.g. a fork branch was rewritten/deleted after the build).
+  Neither case is an error; proceed without it, just without rpmlintrc
+  discovery (see Step 3).
 
 You do not need to download anything yourself, and there is no Bugzilla or
 COPR involved -- do not attempt to use the `copr` or `bugzilla` CLIs.
@@ -112,14 +119,36 @@ rpm -qp --qf '%{LICENSE}\n' <RPM>
 ```
 
 Run `rpmlint` directly against the spec file and all RPMs (see Step 4 for how
-to get the spec file):
+to get the spec file). If `$WORKDIR/dist-git/` exists (see Input), first
+check whether it has an `*.rpmlintrc` or `rpmlint.toml`:
+
+```bash
+ls "$WORKDIR/dist-git/"*.rpmlintrc "$WORKDIR/dist-git/rpmlint.toml" 2>/dev/null
+```
+
+If a config was found, run rpmlint from *within* `dist-git/` and pass it
+explicitly -- running rpmlint from that directory does **not** make it
+auto-discover the config on its own (rpmlint only auto-loads a same-name
+rpmlintrc when linting exactly one file, from that one file's own
+directory; here you're linting multiple files that live in `artifacts/`,
+a different directory entirely):
+
+```bash
+(cd "$WORKDIR/dist-git" && rpmlint -r ./NAME.rpmlintrc "$WORKDIR/artifacts/"*.spec "$WORKDIR/artifacts/"*.rpm)
+# or, for rpmlint.toml:
+(cd "$WORKDIR/dist-git" && rpmlint -c ./rpmlint.toml "$WORKDIR/artifacts/"*.spec "$WORKDIR/artifacts/"*.rpm)
+```
+
+Otherwise (no `dist-git/`, or no config file in it), run it plainly:
 
 ```bash
 rpmlint "$WORKDIR/artifacts/"*.spec "$WORKDIR/artifacts/"*.rpm
 ```
 
 Treat this output the same way the interactive skill treats `rpmlint.txt`:
-explain every warning/error, and note which ones are false positives.
+explain every warning/error, and note which ones are false positives. If a
+project's own `.rpmlintrc` suppresses a warning, don't re-flag it as an
+issue -- that's the maintainer's deliberate, checked-in call.
 
 ## Step 4: Extract and Inspect Sources
 

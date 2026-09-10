@@ -2,7 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from llm_review.koji import KojiError, _reorganize_downloaded_tasks, parse_task_id
+from llm_review.koji import (
+    KojiError,
+    _reorganize_downloaded_tasks,
+    parse_source_scm,
+    parse_task_id,
+)
 
 
 def test_parse_task_id_bare():
@@ -85,3 +90,30 @@ def test_reorganize_downloaded_tasks_falls_back_to_task_id_without_label(tmp_pat
     _reorganize_downloaded_tasks(tmp_dir, dest, children=[])
 
     assert (dest / "build.150016654.log").read_text() == "some log"
+
+
+def test_parse_source_scm_real_taskinfo_output():
+    # Real `koji taskinfo -v` output has the Source: line indented under
+    # "Request Parameters:".
+    taskinfo = (
+        "Task: 150016639\n"
+        "Type: build\n"
+        "Request Parameters:\n"
+        "  Source: git+https://src.fedoraproject.org/forks/churchyard/rpms/"
+        "python-pip.git#27a9e0d2f29eb7841cfb5d4503f05c6dfec7d4d4\n"
+        "  Build Target: rawhide\n"
+    )
+    assert parse_source_scm(taskinfo) == (
+        "https://src.fedoraproject.org/forks/churchyard/rpms/python-pip.git",
+        "27a9e0d2f29eb7841cfb5d4503f05c6dfec7d4d4",
+    )
+
+
+def test_parse_source_scm_no_source_line():
+    assert parse_source_scm("Task: 1\nType: build\n") is None
+
+
+def test_parse_source_scm_non_git_source():
+    # e.g. a task built from a raw uploaded SRPM, not dist-git.
+    taskinfo = "Request Parameters:\n  Source: cli-build/some.src.rpm\n"
+    assert parse_source_scm(taskinfo) is None

@@ -18,6 +18,8 @@ from urllib.parse import parse_qs, urlparse
 from .retry import run_with_retry
 
 _TASK_ID_RE = re.compile(r"^\d+$")
+_SOURCE_LINE_RE = re.compile(r"^\s*Source:\s*(.*)$", re.MULTILINE)
+_SOURCE_SCM_RE = re.compile(r"^git\+(?P<url>.*)#(?P<ref>.*)$")
 
 
 class KojiError(RuntimeError):
@@ -37,6 +39,22 @@ def parse_task_id(value: str) -> str:
 
 def _profile_args(profile: str | None) -> list[str]:
     return ["--profile", profile] if profile else []
+
+
+def parse_source_scm(taskinfo_text: str) -> tuple[str, str] | None:
+    """Parse the ``Source: git+<url>#<ref>`` line from ``koji taskinfo -v`` output.
+
+    Mirrors packit/tmt-plans' ``utils.get_dist_git``. Returns ``(repo_url,
+    ref)``, or ``None`` if the task wasn't built from an SCM source (e.g. a
+    raw uploaded SRPM) -- not all Koji tasks have one, and that's fine.
+    """
+    source_match = _SOURCE_LINE_RE.search(taskinfo_text)
+    if not source_match:
+        return None
+    scm_match = _SOURCE_SCM_RE.match(source_match.group(1).strip())
+    if not scm_match:
+        return None
+    return scm_match.group("url"), scm_match.group("ref")
 
 
 def fetch_taskinfo(task_id: str, profile: str | None = None) -> str:

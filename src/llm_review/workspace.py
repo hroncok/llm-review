@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
+import subprocess
 from functools import partial
 from importlib import resources
 from pathlib import Path
 
 from . import koji
 from .retry import run_with_retry
+
+logger = logging.getLogger(__name__)
 
 # Reference repos cloned into the workspace, keyed by the directory name
 # they're cloned into under $WORKDIR (see the skill's "Input" section).
@@ -68,6 +72,37 @@ def clone_repos(workdir: Path) -> None:
         )
 
 
+def clone_dist_git(workdir: Path, repo_url: str, ref: str) -> None:
+    """Clone the dist-git repo this build came from and check out its exact ref.
+
+    Full clone, not shallow -- ``ref`` is a specific commit that may not be
+    reachable from a shallow clone of just the default branch's tip. Used
+    so the skill can find any ``*.rpmlintrc``/``rpmlint.toml`` next to the
+    spec, which a plain `koji download-task` doesn't provide.
+
+    Raises ``subprocess.CalledProcessError`` if ``ref`` can't be checked
+    out -- seen live: a PR build's fork branch can be rewritten or deleted
+    after the fact, making its exact commit permanently unreachable, not
+    just a transient failure. Removes ``dest`` on that failure rather than
+    leaving a clone checked out to the wrong (default-branch) commit, which
+    would silently mislead the skill into treating it as this build's
+    actual dist-git content.
+    """
+    dest = workdir / "dist-git"
+    run_with_retry(
+        ["git", "clone", repo_url, str(dest)],
+        on_retry=partial(shutil.rmtree, dest, ignore_errors=True),
+    )
+    try:
+        # Local operation once cloned -- not network-dependent, so no retry.
+        # `switch -d` (unlike `checkout`) detaches without the noisy "Note:
+        # switching to ... you are in 'detached HEAD' state ..." advisory.
+        subprocess.run(["git", "switch", "-d", ref], cwd=dest, check=True)
+    except subprocess.CalledProcessError:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+
+
 def install_skill(workdir: Path, skill_source: Path) -> None:
     if not skill_source.is_dir():
         raise WorkspaceError(
@@ -108,6 +143,28 @@ def prepare(
 
     taskinfo = koji.fetch_taskinfo(task_id, profile=koji_profile)
     (workdir / "koji-taskinfo.txt").write_text(taskinfo)
+
+    source = koji.parse_source_scm(taskinfo)
+    if not source:
+        logger.info(
+            "Koji task %s has no SCM source; skipping dist-git clone "
+            "(no rpmlintrc discovery for this review)",
+            task_id,
+        )
+    else:
+        try:
+            clone_dist_git(workdir, *source)
+        except subprocess.CalledProcessError as exc:
+            # Not fatal: dist-git only enables rpmlintrc discovery, it's not
+            # needed for the rest of the review. Seen live: a fork branch
+            # can be rewritten/deleted after the build, making its exact
+            # commit permanently unreachable.
+            logger.warning(
+                "Could not clone/check out dist-git for Koji task %s (%s); "
+                "continuing without it (no rpmlintrc discovery for this review)",
+                task_id,
+                exc,
+            )
 
     artifacts_dir = workdir / "artifacts"
     koji.download_artifacts(task_id, artifacts_dir, profile=koji_profile)
