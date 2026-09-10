@@ -5,6 +5,12 @@ repository. See `README.md` for user-facing usage docs; this file is about
 how to *work on* the project — conventions, architecture, and gotchas that
 aren't obvious from reading the code once.
 
+**Persist project conventions/feedback here, not in a personal/local memory
+system.** A memory system tied to one person's machine or session isn't
+visible to other contributors or agents working on this repo. This file is
+checked into git and visible to everyone. When you learn something worth
+remembering about how to work on this project, add it here instead.
+
 ## What this project is
 
 An unattended, Fedora-CI-shaped tool that runs an AI-powered Fedora package
@@ -208,6 +214,12 @@ present, falling back to `subtype` otherwise; keep using it rather than
   malformed).
 - Always run `ruff check src tests` alongside pytest; it's part of what
   "done" means for a change here.
+- **Only run the checks relevant to what actually changed.** A
+  `skills/fedora-package-review/SKILL.md`-only (or other prose/docs) change
+  touches nothing `ruff`/`pytest`/`tmt lint` read — running them anyway is
+  just noise. Run `pytest`/`ruff` when `src/`/`tests/*.py` changed, `tmt
+  lint` when `plans/`/`tests/*/main.fmf` changed, and skip verification
+  commands entirely for a docs/skill-wording-only change.
 - **There is no mocking of the Claude Agent SDK.** An actual end-to-end run
   (`python -m llm_review <task-id>`) makes a real, billed call to whichever
   backend is configured (Vertex today). Don't run one casually while
@@ -220,6 +232,10 @@ present, falling back to `subtype` otherwise; keep using it rather than
 
 - Only commit when the user explicitly asks — this project follows the
   general Claude Code default of not committing proactively.
+- **Commit independent changes separately, not bundled into one commit.**
+  If a session produced several unrelated fixes/features, that's several
+  commits, each reviewable and revertable on its own — don't fold them
+  together just because they landed in the same conversation.
 - Trailer: use `Assisted-By: <model name>` (e.g. `Assisted-By: Claude Sonnet
   5`), **not** the default `Co-Authored-By: <model> <noreply@anthropic.com>`.
   No email address. Use whichever model actually did the work — don't
