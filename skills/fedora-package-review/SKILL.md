@@ -23,8 +23,10 @@ you start:
 - `$WORKDIR/license-data/` -- a checkout of Fedora's per-license database
   (see Step 5) -- one `data/<SPDX-ID>.toml` file per license, each with the
   license's actual Fedora approval `status`.
-- `$WORKDIR/artifacts/` -- the downloaded Koji task output: the SRPM, the built
-  RPMs, and (if available) `build.log`/`root.log`/`task.log`.
+- `$WORKDIR/artifacts/` -- the downloaded Koji task output: the SRPM, the
+  built RPMs, and (if available) per-subtask logs named `<name>.<label>.log`
+  (e.g. `build.x86_64.log`, `build.noarch.log`) -- see Step 2 for what
+  `<label>` means and why `srpm`-labeled logs are not a real build log.
 - `$WORKDIR/koji-taskinfo.txt` -- the output of `koji taskinfo -v <task-id>`,
   for context (package NVR, build target, owner, etc).
 
@@ -66,9 +68,24 @@ ls -la "$WORKDIR/artifacts"
 ```
 
 You should find one `.src.rpm` and one or more binary `.rpm` files (per arch),
-and possibly `.log` files. If build/root logs are present, check the tail of
-`build.log` to verify tests actually ran and passed -- do not just assume
-success from the presence of RPMs.
+and possibly log files named `<name>.<label>.log` (e.g. `build.x86_64.log`,
+`root.noarch.log`) -- `<label>` identifies which Koji subtask produced that
+log, and it matters:
+
+- A `*.srpm.log` file (e.g. `build.srpm.log`) is from the `buildSRPMFromSCM`
+  subtask, which only generates the SRPM -- it never runs
+  `%build`/`%install`/`%check`, no matter how big or normal-looking it is.
+  **Never treat a `*.srpm.log` as evidence that tests ran or that the build
+  succeeded for any architecture.**
+- Every other label (`x86_64`, `noarch`, `aarch64`, ...) is a real
+  `buildArch` subtask for that target -- **these** are the logs to check
+  for `%check` output. If build/root logs are present for a target, check
+  the tail of its `build.<label>.log` to verify tests actually ran and
+  passed -- do not just assume success from the presence of RPMs.
+- A `noarch` package's single `buildArch` subtask can land on a builder
+  host of any architecture -- that host arch is irrelevant; the label
+  (`noarch`) is what matters, and there's exactly one such log regardless
+  of how many RPMs get built from it.
 
 There is no `review.txt`, `rpmlint.txt`, or `licensecheck.txt` pre-generated
 here (those are COPR fedora-review-service artifacts and don't exist for a
@@ -244,7 +261,7 @@ should be all zeros in that case).
 2. **Verify licenses manually.** There is no automated licensecheck output here; bundled/minified code needs manual inspection.
 3. **Distinguish MUST from SHOULD.** Only MUST violations block approval.
 4. **Explain false positives.** When rpmlint flags something that is actually correct, explain why.
-5. **Check build logs.** Verify tests ran and passed, not just that the build succeeded.
+5. **Check build logs -- but not the `*.srpm.log` one.** Verify tests ran and passed using a real `buildArch` log (`build.<label>.log` where `<label>` isn't `srpm`), not just that the build succeeded.
 6. **Always write the report to `$REVIEW_OUTPUT_PATH`.** This is a non-interactive run; nothing you say outside that file is recoverable by the caller.
 7. **Use `error`, not `needs discussion`, when you can't review at all.** `needs discussion` implies you completed the review and have a genuine judgment call to flag; `error` means the review itself couldn't be carried out.
 8. **Never omit the `### SUMMARY` section, and make its counts exact.** It is as mandatory as `### VERDICT` -- the caller trusts these numbers instead of re-parsing `### ISSUES`, so they must match the numbered list exactly, with no line omitted even when its count is `0`.
