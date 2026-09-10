@@ -244,28 +244,13 @@ Use exactly one of those three bold labels per item, with nothing else
 inside the bold markers (not `**Minor / informational**` or
 `**Minor / pre-existing**`) -- put any qualifier *after* the label instead,
 e.g. `**Minor** (pre-existing): ...`. The caller counts these labels
-programmatically.
-
-### SUMMARY
-
-Blockers: <count>
-Should-fix: <count>
-Minor: <count>
+programmatically by scanning this list -- don't separately summarize or
+total them anywhere else in the report.
 
 ### VERDICT
 
 <approve / needs fixes / needs discussion / error>
 ```
-
-**The `### SUMMARY` section itself is mandatory, exactly like `### VERDICT`
--- never skip the whole section**, even when every count is `0`. It must
-contain exactly those three lines, in that order, with the count of each
-category you listed under `### ISSUES` (use `0` if there were none of that
-category -- never omit a line). The caller parses these lines
-programmatically instead of trying to re-count your `### ISSUES` list
-itself, so the numbers must accurately match what you listed above -- don't
-include a line here for anything you didn't actually list as a numbered
-issue (e.g. don't count a sentence like "no blockers were found").
 
 The `### VERDICT` line must contain *only* the bare word `approve`,
 `needs fixes`, `needs discussion`, or `error` -- no bold/markdown formatting,
@@ -274,10 +259,9 @@ parses this line programmatically to decide the CI result; put any
 elaboration in the PASS/ISSUES sections instead.
 
 Use `error` when the review could not actually be performed (see "If you
-cannot actually perform the review" above) -- in that case, the ### PASS,
-### ISSUES, and ### SUMMARY sections should explain what's missing/broken
-instead of listing guideline checks, since none could be run (### SUMMARY
-should be all zeros in that case).
+cannot actually perform the review" above) -- in that case, the ### PASS
+and ### ISSUES sections should explain what's missing/broken instead of
+listing guideline checks, since none could be run.
 
 ## Key Principles
 
@@ -288,5 +272,4 @@ should be all zeros in that case).
 5. **Check build logs -- but not the `*.srpm.log` one.** Verify tests ran and passed using a real `buildArch` log (`build.<label>.log` where `<label>` isn't `srpm`), not just that the build succeeded.
 6. **Always write the report to `$REVIEW_OUTPUT_PATH`.** This is a non-interactive run; nothing you say outside that file is recoverable by the caller.
 7. **Use `error`, not `needs discussion`, when you can't review at all.** `needs discussion` implies you completed the review and have a genuine judgment call to flag; `error` means the review itself couldn't be carried out.
-8. **Never omit the `### SUMMARY` section, and make its counts exact.** It is as mandatory as `### VERDICT` -- the caller trusts these numbers instead of re-parsing `### ISSUES`, so they must match the numbered list exactly, with no line omitted even when its count is `0`.
-9. **Never judge `License:` field composition from general reasoning.** Whether an SPDX expression's `AND`/`OR` structure or a repeated license clause is correct is governed by `legal-docs/license-field.adoc`, not the Packaging Guidelines and not what "looks redundant" -- read that document before flagging anything about the `License:` field.
+8. **Never judge `License:` field composition from general reasoning.** Whether an SPDX expression's `AND`/`OR` structure or a repeated license clause is correct is governed by `legal-docs/license-field.adoc`, not the Packaging Guidelines and not what "looks redundant" -- read that document before flagging anything about the `License:` field.

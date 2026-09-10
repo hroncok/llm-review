@@ -48,26 +48,14 @@ _VERDICT_RE = re.compile(
 
 VERDICTS = ("approve", "needs fixes", "needs discussion", "error")
 
-_SUMMARY_SECTION_RE = re.compile(
-    r"###\s*SUMMARY\s*\n(.*?)(?=\n###\s|\Z)", re.IGNORECASE | re.DOTALL
-)
-_SUMMARY_LINE_RE = re.compile(
-    r"^\s*-?\s*(Blockers?|Should-fix|Minor)\s*:\s*(\d+)\s*$",
-    re.IGNORECASE | re.MULTILINE,
-)
-_SUMMARY_KEY_TO_CATEGORY = {
-    "blocker": "blocker",
-    "blockers": "blocker",
-    "should-fix": "should-fix",
-    "minor": "minor",
-}
-
-# Fallback for when ### SUMMARY is missing entirely: count list items
-# directly in ### ISSUES. Anchored to a list-item marker so prose like "No
-# **Blocker** issues were found." isn't miscounted (a real bug fixed once
-# already), and matches just the category word's opening `**` -- not a
-# closing `**` right after it -- because the model sometimes extends the
-# label, e.g. "**Minor / informational**" or "**Minor / pre-existing**".
+# Count list items directly in ### ISSUES rather than trusting the model to
+# separately tally them (a ### SUMMARY section asking for exactly that was
+# tried and dropped: despite being marked mandatory, it was almost never
+# actually produced in practice). Anchored to a list-item marker so prose
+# like "No **Blocker** issues were found." isn't miscounted (a real bug
+# fixed once already), and matches just the category word's opening `**` --
+# not a closing `**` right after it -- because the model sometimes extends
+# the label, e.g. "**Minor / informational**" or "**Minor / pre-existing**".
 _ISSUES_SECTION_RE = re.compile(
     r"###\s*ISSUES\s*\n(.*?)(?=\n###\s|\Z)", re.IGNORECASE | re.DOTALL
 )
@@ -123,12 +111,12 @@ def _extract_verdict(report: str) -> str:
     return match.group(1).lower()
 
 
-def _count_issues_from_list(report: str) -> dict[str, int]:
-    """Fallback: count list items directly in ### ISSUES.
+def _count_issues(report: str) -> dict[str, int]:
+    """Count issues per category by counting list items in ### ISSUES.
 
-    Used only when ### SUMMARY is missing entirely. See _ISSUE_ITEM_RE for
-    why this is safe against the false-positive that broke the previous,
-    always-on version of this approach.
+    A verdict of "approve" can still come with minor (or should-fix) issues
+    noted -- these counts let callers surface that instead of collapsing
+    everything down to the verdict alone.
     """
     counts = dict.fromkeys(ISSUE_CATEGORIES, 0)
     section_match = _ISSUES_SECTION_RE.search(report)
@@ -136,36 +124,6 @@ def _count_issues_from_list(report: str) -> dict[str, int]:
         return counts
     for match in _ISSUE_ITEM_RE.finditer(section_match.group(1)):
         counts[match.group(1).lower()] += 1
-    return counts
-
-
-def _count_issues(report: str) -> dict[str, int]:
-    """Read the per-category issue counts from the ### SUMMARY section.
-
-    The skill is instructed to count its own ### ISSUES list and report the
-    totals in a fixed `Category: N` format -- parsing that is far more
-    reliable than us re-deriving counts from free-form issue prose (which
-    previously miscounted negations like "No **Blocker** issues were found."
-    as an actual blocker). When the section is missing entirely (seen live,
-    more than once, despite the skill saying it's required), fall back to
-    counting ### ISSUES list items directly rather than silently reporting
-    all zeros.
-
-    A verdict of "approve" can still come with minor (or should-fix) issues
-    noted -- these counts let callers surface that instead of collapsing
-    everything down to the verdict alone.
-    """
-    section_match = _SUMMARY_SECTION_RE.search(report)
-    if not section_match:
-        logger.warning(
-            "Report has no ### SUMMARY section; falling back to counting "
-            "### ISSUES list items directly"
-        )
-        return _count_issues_from_list(report)
-    counts = dict.fromkeys(ISSUE_CATEGORIES, 0)
-    for match in _SUMMARY_LINE_RE.finditer(section_match.group(1)):
-        category = _SUMMARY_KEY_TO_CATEGORY[match.group(1).lower()]
-        counts[category] = int(match.group(2))
     return counts
 
 
