@@ -47,8 +47,19 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content)
 
 
-def test_reorganize_downloaded_tasks_disambiguates_same_named_logs_by_label(tmp_path):
-    # Real-world case: a buildSRPMFromSCM subtask (label "srpm") and a
+@pytest.mark.parametrize(
+    "srpm_method",
+    [
+        "buildSRPMFromSCM",  # a build from a git source (what CI always uses)
+        "rebuildSRPM",  # a build from an uploaded SRPM -- same `label`
+        # ("srpm"), only used for convenient local testing; CI never
+        # produces this one.
+    ],
+)
+def test_reorganize_downloaded_tasks_disambiguates_same_named_logs_by_label(
+    tmp_path, srpm_method
+):
+    # Real-world case: an SRPM-generation subtask (label "srpm") and a
     # noarch buildArch subtask (label "noarch") coincidentally ran on
     # same-arch builder hosts, so koji's own flat download would have
     # silently skipped downloading the second (real) build.log as an
@@ -59,7 +70,7 @@ def test_reorganize_downloaded_tasks_disambiguates_same_named_logs_by_label(tmp_
     _write(tmp_dir / "150016654" / "build.log", "srpm generation log")
     _write(tmp_dir / "150016740" / "build.log", "real %build/%check log")
     children = [
-        {"id": 150016654, "method": "buildSRPMFromSCM", "label": "srpm"},
+        {"id": 150016654, "method": srpm_method, "label": "srpm"},
         {"id": 150016740, "method": "buildArch", "label": "noarch"},
     ]
 

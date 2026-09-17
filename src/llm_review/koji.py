@@ -106,9 +106,12 @@ def download_artifacts(task_id: str, dest: Path, profile: str | None = None) -> 
     into ``dest`` as a flat directory. Koji's own flat-mode naming
     disambiguates generic log files (``build.log``, ``root.log``, ...) by
     the *builder host's* architecture, not the subtask's actual target --
-    the ``buildSRPMFromSCM`` subtask (which only generates the SRPM, and
-    never runs ``%build``/``%install``/``%check``) can coincidentally run
-    on the same-arch builder host as a real ``buildArch`` subtask (e.g. any
+    the SRPM-generation subtask (``buildSRPMFromSCM`` for a build from a
+    git source, or ``rebuildSRPM`` for one from an uploaded SRPM -- e.g.
+    testing locally with `koji build --scratch`; CI never produces this
+    one, only ``buildSRPMFromSCM``) only generates the SRPM and never runs
+    ``%build``/``%install``/``%check``, but can coincidentally run on the
+    same-arch builder host as a real ``buildArch`` subtask (e.g. any
     `noarch` package's single buildArch task can land on any host arch).
     When that happens, koji's flat download silently *skips* downloading
     the second (real) log file as an "already downloaded" duplicate --
