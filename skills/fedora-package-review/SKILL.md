@@ -252,9 +252,17 @@ of retrieving your result, so do not skip this:
 
 <show the spec file>
 
+### Evidence
+
+<the raw data collected in Steps 2-5, so a human reader can check your
+claims without re-running anything themselves -- see "What goes in
+Evidence" below>
+
 ### PASS
 
-<numbered list of checks that passed, with brief justification>
+<numbered list of checks that passed, with brief justification -- when a
+claim relies on something in Evidence, say which part (e.g. "see rpmlint
+output" or "see python3-foo's Provides below")>
 
 ### ISSUES
 
@@ -286,6 +294,31 @@ cannot actually perform the review" above) -- in that case, the ### PASS
 and ### ISSUES sections should explain what's missing/broken instead of
 listing guideline checks, since none could be run.
 
+### What goes in Evidence
+
+The point of this section is that a human reading the report should never
+have to take a PASS/ISSUES claim on faith or re-run a command themselves to
+check it -- the data you based the claim on should already be right there.
+Use `####` subheadings, one per RPM/topic as needed, e.g.:
+
+- **RPM metadata** -- for each binary RPM, the `rpm -qp --provides`,
+  `--requires`, `-l`, and `--qf '%{LICENSE}\n'` output from Step 3.
+- **rpmlint output** -- the full raw output from Step 3, including the
+  invocation used (plain, or with a discovered `.rpmlintrc`/`rpmlint.toml`).
+- **Build log verification** -- the tail of the `build.<label>.log` you
+  checked in Step 2, showing tests actually running/passing (name the
+  label/architecture; note if no such log was available).
+- **License findings** -- from Step 5: which `LICENSE*`/`COPYING*`/`NOTICE*`
+  files were found and where; for bundled/vendored code, the extracted
+  license comments/metadata (not just your conclusion about them); and the
+  `status` looked up for each distinct SPDX license in `license-data`.
+
+Don't paste megabytes of irrelevant output (e.g. a huge passing test log in
+full) -- excerpt the parts that actually back a claim, but always include
+enough that the reader can see the real command output, not your paraphrase
+of it. If a claim in PASS/ISSUES isn't backed by anything in Evidence, that's
+a sign that either the check wasn't actually done or a citation was missed.
+
 ## Key Principles
 
 1. **Read the guidelines first.** They are the source of truth and they change. Always read the current `.adoc` files.
@@ -296,3 +329,4 @@ listing guideline checks, since none could be run.
 6. **Always write the report to `$REVIEW_OUTPUT_PATH`.** This is a non-interactive run; nothing you say outside that file is recoverable by the caller.
 7. **Use `error`, not `needs discussion`, when you can't review at all.** `needs discussion` implies you completed the review and have a genuine judgment call to flag; `error` means the review itself couldn't be carried out.
 8. **Never judge `License:` field composition from general reasoning.** Whether an SPDX expression's `AND`/`OR` structure or a repeated license clause is correct is governed by `legal-docs/license-field.adoc`, not the Packaging Guidelines and not what "looks redundant" -- read that document before flagging anything about the `License:` field.
+9. **Show your work.** A PASS/ISSUES claim like "Provides/requires look correct for extras" is not verifiable by itself -- the `### Evidence` section must contain the actual command output (rpm queries, rpmlint, build log excerpts, license findings) it's based on, so a human reviewer can check your reasoning without re-running anything.
