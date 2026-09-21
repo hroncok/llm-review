@@ -159,9 +159,25 @@ async def _run(
     backend: BackendConfig,
     output_path: Path,
 ) -> ReviewResult:
+    # Redirect the CLI's user-level config dir (normally ~/.claude) into an
+    # empty directory under the ephemeral workdir. Without this, the
+    # subprocess inherits the developer's real HOME and merges their
+    # personal ~/.claude/skills/ into the session -- including their own
+    # interactive fedora-package-review skill (see AGENTS.md: "the two are
+    # intentionally independent"), which has the same skill name as the one
+    # installed here and would otherwise collide with/shadow it. `skills=`
+    # is a context filter, not a sandbox: an unlisted skill's files are
+    # still reachable via Bash/Read, so redirecting CLAUDE_CONFIG_DIR is the
+    # only way to actually keep the personal skill tree out of this session.
+    claude_config_dir = workdir / ".claude-home"
+    claude_config_dir.mkdir(parents=True, exist_ok=True)
     options = ClaudeAgentOptions(
         cwd=str(workdir),
-        env={**backend.env, "REVIEW_OUTPUT_PATH": str(output_path)},
+        env={
+            **backend.env,
+            "REVIEW_OUTPUT_PATH": str(output_path),
+            "CLAUDE_CONFIG_DIR": str(claude_config_dir),
+        },
         model=backend.model,
         skills=[SKILL_NAME],
         tools=["Bash", "Read", "Grep", "Glob", "Skill"],

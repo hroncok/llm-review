@@ -188,6 +188,22 @@ list must always include `"Skill"` whenever `skills=` is set. Caught by
 watching a live run's tool-call log and seeing `find`/manual `Read` calls
 hunting for the skill file instead of a `Skill` tool call.
 
+## SDK gotcha: the subprocess inherits your real `~/.claude` unless redirected
+
+`ClaudeAgentOptions.skills=[SKILL_NAME]` only filters what's *shown* to the
+model — it is "a context filter, not a sandbox" (the SDK's own docstring):
+unlisted skills' files are still on disk and reachable via Bash/Read. Left
+alone, the subprocess spawned by `query()` inherits the developer's real
+`HOME`, so it would also discover `~/.claude/skills/fedora-package-review`
+— the developer's personal, *interactive* skill of the same name (see "The
+skill" section above) — and could read from or get confused by it. Fixed by
+setting `CLAUDE_CONFIG_DIR` (in `reviewer._run()`'s `env=`) to an empty
+directory under the ephemeral workdir, which redirects the CLI's notion of
+the user-level config/skills tree away from the real `~/.claude` entirely.
+Project-level skill discovery (`<cwd>/.claude/skills`, i.e. the one
+`workspace.install_skill()` populates) is unaffected — that's resolved via
+`cwd`, not `CLAUDE_CONFIG_DIR`.
+
 ## SDK gotcha: `ResultMessage.subtype` can lie when `is_error` is set
 
 An API-level failure (rate limit, auth, transient error, ...) arrives as a
