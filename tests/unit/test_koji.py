@@ -2,12 +2,85 @@ from pathlib import Path
 
 import pytest
 
+from llm_review import koji as koji_module
 from llm_review.koji import (
     KojiError,
     _reorganize_downloaded_tasks,
+    download_artifacts,
+    fetch_task_children,
+    fetch_taskinfo,
     parse_source_scm,
     parse_task_id,
 )
+
+
+class _FakeCompletedProcess:
+    def __init__(self, stdout: str = "") -> None:
+        self.stdout = stdout
+
+
+def test_fetch_taskinfo_passes_noauth(monkeypatch):
+    # Without --noauth, the koji CLI tries to establish an *authenticated*
+    # session before running any command -- even this read-only one -- per
+    # the machine's `authtype = kerberos` default. With no Kerberos ticket
+    # (e.g. in CI), that login attempt itself fails with a 401 on
+    # /kojihub/ssllogin, which looks like an auth failure on the real call
+    # but happens before it. --noauth skips that login attempt entirely.
+    calls = []
+    monkeypatch.setattr(
+        koji_module,
+        "run_with_retry",
+        lambda cmd, **kwargs: calls.append(cmd) or _FakeCompletedProcess("Task: 1\n"),
+    )
+
+    fetch_taskinfo("123")
+
+    assert calls == [["koji", "--noauth", "taskinfo", "-v", "123"]]
+
+
+def test_fetch_taskinfo_passes_noauth_and_profile(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        koji_module,
+        "run_with_retry",
+        lambda cmd, **kwargs: calls.append(cmd) or _FakeCompletedProcess(""),
+    )
+
+    fetch_taskinfo("123", profile="shared-tests")
+
+    assert calls == [
+        ["koji", "--noauth", "--profile", "shared-tests", "taskinfo", "-v", "123"]
+    ]
+
+
+def test_fetch_task_children_passes_noauth(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        koji_module,
+        "run_with_retry",
+        lambda cmd, **kwargs: calls.append(cmd) or _FakeCompletedProcess("[]"),
+    )
+
+    fetch_task_children("123")
+
+    assert calls == [
+        ["koji", "--noauth", "call", "--json-output", "getTaskChildren", "123"]
+    ]
+
+
+def test_download_artifacts_passes_noauth(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run_with_retry(cmd, **kwargs):
+        calls.append(cmd)
+        return _FakeCompletedProcess("[]" if "call" in cmd else "")
+
+    monkeypatch.setattr(koji_module, "run_with_retry", fake_run_with_retry)
+
+    download_artifacts("123", tmp_path / "dest")
+
+    assert all("--noauth" in cmd for cmd in calls)
+    assert any(cmd[:2] == ["koji", "--noauth"] and "download-task" in cmd for cmd in calls)
 
 
 def test_parse_task_id_bare():

@@ -85,6 +85,24 @@ Key adaptations from the original:
   `results.VERDICT_TO_RESULT` in the same change** — they must stay in
   sync, and nothing enforces that automatically.
 
+## Koji CLI auth: `--noauth`, not a Kerberos ticket
+
+Every `koji` call this project makes (`taskinfo`, `call getTaskChildren`,
+`download-task`) is a read-only operation and works fine against an
+anonymous session on `koji.fedoraproject.org` — none of it needs a logged-in
+user. Found live: running without a Kerberos ticket failed with
+`GSSAPIAuthError: ... 401 Client Error: Unauthorized for url:
+.../kojihub/ssllogin`. That looks like the *read call* was rejected for
+lacking auth, but it's not — the `koji` CLI, per the machine's default
+`authtype = kerberos` (`/etc/koji.conf`), tries to establish an
+*authenticated* session before running any subcommand at all, read-only or
+not, and that login attempt is what 401s with no ticket available. The fix
+is `koji.py`'s `_global_args()` passing `--noauth` on every invocation,
+which skips that login attempt entirely — **not** provisioning a Kerberos
+keytab/service-account secret for CI, which would solve a problem that
+doesn't actually exist here (and would be needless secret-handling
+complexity for a tool that never needs to be a logged-in Koji user).
+
 ## License verification data sources
 
 Found live: the model called a `License:` field's SPDX expression

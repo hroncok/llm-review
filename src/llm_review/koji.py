@@ -37,8 +37,25 @@ def parse_task_id(value: str) -> str:
     raise KojiError(f"Could not extract a Koji task ID from {value!r}")
 
 
-def _profile_args(profile: str | None) -> list[str]:
-    return ["--profile", profile] if profile else []
+def _global_args(profile: str | None) -> list[str]:
+    """Global ``koji`` CLI args shared by every call: profile, and ``--noauth``.
+
+    Every call this module makes (``taskinfo``, ``call getTaskChildren``,
+    ``download-task``) is read-only and works fine against an anonymous
+    session. Without ``--noauth``, the CLI still tries to establish an
+    *authenticated* session first (per the machine's ``authtype =
+    kerberos`` in ``/etc/koji.conf``) before running any command, including
+    these -- with no Kerberos ticket (e.g. in CI), that login attempt itself
+    fails with ``GSSAPIAuthError: ... 401 ... /kojihub/ssllogin``, which
+    looks like an authorization failure on the actual call but happens
+    before the call is even made. ``--noauth`` skips that login attempt
+    entirely instead of requiring a ticket/keytab for operations that never
+    needed one.
+    """
+    args = ["--noauth"]
+    if profile:
+        args += ["--profile", profile]
+    return args
 
 
 def parse_source_scm(taskinfo_text: str) -> tuple[str, str] | None:
@@ -60,7 +77,7 @@ def parse_source_scm(taskinfo_text: str) -> tuple[str, str] | None:
 def fetch_taskinfo(task_id: str, profile: str | None = None) -> str:
     """Return the output of ``koji taskinfo -v <task_id>``."""
     result = run_with_retry(
-        ["koji", *_profile_args(profile), "taskinfo", "-v", task_id],
+        ["koji", *_global_args(profile), "taskinfo", "-v", task_id],
         capture_output=True,
         text=True,
     )
@@ -70,7 +87,7 @@ def fetch_taskinfo(task_id: str, profile: str | None = None) -> str:
 def fetch_task_children(task_id: str, profile: str | None = None) -> list[dict]:
     """Return ``getTaskChildren(task_id)`` (each with ``id``, ``method``, ``label``, ...)."""
     result = run_with_retry(
-        ["koji", *_profile_args(profile), "call", "--json-output", "getTaskChildren", task_id],
+        ["koji", *_global_args(profile), "call", "--json-output", "getTaskChildren", task_id],
         capture_output=True,
         text=True,
     )
@@ -122,7 +139,7 @@ def download_artifacts(task_id: str, dest: Path, profile: str | None = None) -> 
     with tempfile.TemporaryDirectory(prefix="koji-download-") as tmp:
         tmp_dir = Path(tmp)
         run_with_retry(
-            ["koji", *_profile_args(profile), "download-task", task_id, "--logs", "--dirpertask"],
+            ["koji", *_global_args(profile), "download-task", task_id, "--logs", "--dirpertask"],
             cwd=tmp_dir,
         )
         children = fetch_task_children(task_id, profile=profile)
