@@ -173,7 +173,7 @@ class _FakeRun:
         self.exc_factory = exc or (lambda: TransientReviewError("transient"))
         self.calls = 0
 
-    async def __call__(self, workdir, backend, output_path):
+    async def __call__(self, workdir, backend, output_path, skill_name=None):
         self.calls += 1
         if self.calls <= self.failures:
             raise self.exc_factory()

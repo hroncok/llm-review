@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "llm-review"
 version = "0.1.0"
-description = "AI-powered Fedora package review for Fedora CI, driven by the fedora-package-review Claude Code skill"
+description = "AI-powered Fedora package review for Fedora CI, driven by the fedora-package-review-koji/-copr Claude Code skills"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -24,12 +24,14 @@ llm-review = "llm_review.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/llm_review"]
 
-# The skill lives at the top-level `skills/` directory (kept there so it's
-# easy to diff/edit against the original interactive skill), not inside
-# src/llm_review/ -- bundle it as package data so it survives a regular
-# non-editable `pip install`, not just an editable/in-place checkout.
+# The skills live at the top-level `skills/` directory (kept there so
+# they're easy to diff/edit, and so skills/_fragments/ can be shared between
+# them -- see scripts/build_skills.py), not inside src/llm_review/ -- bundle
+# each as package data so it survives a regular non-editable `pip install`,
+# not just an editable/in-place checkout.
 [tool.hatch.build.targets.wheel.force-include]
-"skills/fedora-package-review" = "llm_review/skill_data/fedora-package-review"
+"skills/fedora-package-review-koji" = "llm_review/skill_data/fedora-package-review-koji"
+"skills/fedora-package-review-copr" = "llm_review/skill_data/fedora-package-review-copr"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

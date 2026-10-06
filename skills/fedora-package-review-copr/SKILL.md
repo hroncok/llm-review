@@ -1,9 +1,9 @@
 ---
-name: fedora-package-review
-description: Review a Fedora package build against the Fedora Packaging Guidelines. Reads guidelines from a local checkout, inspects downloaded SRPM/RPM artifacts, verifies licenses (including bundled/minified code), and produces a structured review report written to $REVIEW_OUTPUT_PATH.
+name: fedora-package-review-copr
+description: Review a single package proposed via the Fedora Package Review Process (a PR adding a <name>/<name>.spec subdirectory), built in Copr. Reads guidelines from a local checkout, inspects the downloaded SRPM/RPM artifacts for one chroot, verifies licenses, and produces a structured review report written to $REVIEW_OUTPUT_PATH.
 ---
 
-# Fedora Package Review (CI variant)
+# Fedora Package Review (Copr/PR CI variant)
 
 Review a package build for Fedora against the packaging guidelines. This is the
 unattended, CI variant of the review skill: there is no human present to answer
@@ -11,9 +11,14 @@ questions, so every step here must be self-contained.
 
 ## Input
 
-You are reviewing the package build already prepared in the current working
-directory (`$WORKDIR`, i.e. `.`). The following are guaranteed to exist before
-you start:
+You are reviewing a package proposed via the [Fedora Package Review
+Process][package-review] -- a PR against a monorepo where each package lives
+in its own `<name>/<name>.spec` subdirectory, built in Copr rather than Koji.
+The build already prepared in the current working directory (`$WORKDIR`, i.e.
+`.`) is for exactly **one** package from that PR. The following are
+guaranteed to exist before you start:
+
+[package-review]: https://forge.fedoraproject.org/packaging/package-review
 
 - `$WORKDIR/guidelines/` -- a checkout of the Fedora Packaging Guidelines (see
   Step 1).
@@ -23,19 +28,19 @@ you start:
 - `$WORKDIR/license-data/` -- a checkout of Fedora's per-license database
   (see Step 5) -- one `data/<SPDX-ID>.toml` file per license, each with the
   license's actual Fedora approval `status`.
-- `$WORKDIR/artifacts/` -- the downloaded Koji task output: the SRPM, the
-  built RPMs, and (if available) per-subtask logs named `<name>.<label>.log`
-  (e.g. `build.x86_64.log`, `build.noarch.log`) -- see Step 2 for what
-  `<label>` means and why `srpm`-labeled logs are not a real build log.
-- `$WORKDIR/koji-taskinfo.txt` -- the output of `koji taskinfo -v <task-id>`,
-  for context (package NVR, build target, owner, etc).
-- `$WORKDIR/dist-git/` -- *if* the build came from an SCM source (the normal
-  case for a PR-triggered scratch build), a checkout of the dist-git repo at
-  the exact commit used for this build. **Not always present** -- absent for
-  a task with no SCM source, or if that exact commit could no longer be
-  checked out (e.g. a fork branch was rewritten/deleted after the build).
-  Neither case is an error; proceed without it, just without rpmlintrc
-  discovery (see Step 3).
+- `$WORKDIR/artifacts/` -- the downloaded Copr build output for **one**
+  chroot: the SRPM, the built RPMs, and (if available) logs named
+  `<name>.<chroot>.log` (e.g. `build.fedora-rawhide-x86_64.log`) -- see
+  Step 2 for what `<chroot>` means.
+- `$WORKDIR/copr-buildinfo.txt` -- the Copr build ID, chroot, package name,
+  and the PR source commit this was built from, for context.
+- `$WORKDIR/dist-git/` -- *if* the exact PR commit could still be checked
+  out, a checkout of **just this package's subdirectory** from the PR's own
+  source repository (not Fedora dist-git -- this package has not been
+  accepted/imported yet). **Not always present** -- absent if that exact
+  commit could no longer be checked out (e.g. a force-push rewrote the PR
+  branch after the build). Not an error; proceed without it, just without
+  rpmlintrc discovery (see Step 3).
 
 You do not need to download anything yourself.
 
@@ -95,26 +100,17 @@ List `$WORKDIR/artifacts/` to see what was downloaded:
 ls -la "$WORKDIR/artifacts"
 ```
 
-You should find one `.src.rpm` and one or more binary `.rpm` files (per arch),
-and possibly log files named `<name>.<label>.log` (e.g. `build.x86_64.log`,
-`root.noarch.log`) -- `<label>` identifies which Koji subtask produced that
-log, and it matters:
+You should find one `.src.rpm` and one or more binary `.rpm` files, and
+(if available) log files named `<name>.<chroot>.log` (e.g.
+`build.fedora-rawhide-x86_64.log`, `root.fedora-rawhide-x86_64.log`) --
+`<chroot>` is the Copr chroot (distro/release/arch) this package was built
+against, also found in `$WORKDIR/copr-buildinfo.txt`.
 
-- A `*.srpm.log` file (e.g. `build.srpm.log`) is from the SRPM-generation
-  subtask (`buildSRPMFromSCM`, or `rebuildSRPM` for a build from an
-  uploaded SRPM instead of a git source), which only generates the SRPM --
-  it never runs `%build`/`%install`/`%check`, no matter how big or
-  normal-looking it is. **Never treat a `*.srpm.log` as evidence that tests
-  ran or that the build succeeded for any architecture.**
-- Every other label (`x86_64`, `noarch`, `aarch64`, ...) is a real
-  `buildArch` subtask for that target -- **these** are the logs to check
-  for `%check` output. If build/root logs are present for a target, check
-  the tail of its `build.<label>.log` to verify tests actually ran and
-  passed -- do not just assume success from the presence of RPMs.
-- A `noarch` package's single `buildArch` subtask can land on a builder
-  host of any architecture -- that host arch is irrelevant; the label
-  (`noarch`) is what matters, and there's exactly one such log regardless
-  of how many RPMs get built from it.
+Unlike a Koji scratch build, there is no separate SRPM-generation log to
+watch out for here: Copr's per-chroot `build.<chroot>.log` is always the
+real `%build`/`%install`/`%check` log for that chroot. If present, check its
+tail to verify tests actually ran and passed -- do not just assume success
+from the presence of RPMs.
 
 You will run rpmlint yourself in Step 3, and do license verification
 manually in Step 5.
@@ -305,9 +301,9 @@ Use `####` subheadings, one per RPM/topic as needed, e.g.:
   `--requires`, `-l`, and `--qf '%{LICENSE}\n'` output from Step 3.
 - **rpmlint output** -- the full raw output from Step 3, including the
   invocation used (plain, or with a discovered `.rpmlintrc`/`rpmlint.toml`).
-- **Build log verification** -- the tail of the `build.<label>.log` you
-  checked in Step 2, showing tests actually running/passing (name the
-  label/architecture; note if no such log was available).
+- **Build log verification** -- the tail of the build log you checked in
+  Step 2, showing tests actually running/passing (name the log you checked;
+  note if none was available).
 - **License findings** -- from Step 5: which `LICENSE*`/`COPYING*`/`NOTICE*`
   files were found and where; for bundled/vendored code, the extracted
   license comments/metadata (not just your conclusion about them); and the
@@ -325,7 +321,7 @@ a sign that either the check wasn't actually done or a citation was missed.
 2. **Verify licenses manually.** Bundled/minified code needs manual inspection.
 3. **Distinguish MUST from SHOULD.** Only MUST violations block approval.
 4. **Explain false positives.** When rpmlint flags something that is actually correct, explain why.
-5. **Check build logs -- but not the `*.srpm.log` one.** Verify tests ran and passed using a real `buildArch` log (`build.<label>.log` where `<label>` isn't `srpm`), not just that the build succeeded.
+5. **Check build logs for real test execution.** Verify tests ran and passed using the real build log identified in Step 2 (see its own guidance for what counts as "real" for this input type), not just that the build succeeded.
 6. **Always write the report to `$REVIEW_OUTPUT_PATH`.** This is a non-interactive run; nothing you say outside that file is recoverable by the caller.
 7. **Use `error`, not `needs discussion`, when you can't review at all.** `needs discussion` implies you completed the review and have a genuine judgment call to flag; `error` means the review itself couldn't be carried out.
 8. **Never judge `License:` field composition from general reasoning.** Whether an SPDX expression's `AND`/`OR` structure or a repeated license clause is correct is governed by `legal-docs/license-field.adoc`, not the Packaging Guidelines and not what "looks redundant" -- read that document before flagging anything about the `License:` field.

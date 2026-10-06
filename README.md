@@ -1,13 +1,24 @@
 # llm-review
 
-AI-powered Fedora package review for Fedora CI.
+AI-powered Fedora package review, headlessly through the [Claude Agent
+SDK](https://pypi.org/project/claude-agent-sdk/). Two independent input
+modes, each downloading its own build artifacts and running its own skill
+variant, but otherwise producing the same kind of structured report:
 
-Given a Koji scratch-build task (as produced by Fedora CI for a package pull
-request), this tool downloads the build's SRPM/RPMs, and runs the
-[`fedora-package-review`](skills/fedora-package-review/SKILL.md) Claude Code
-skill against them headlessly through the
-[Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/), producing a
-structured review report and a Fedora-CI-style result.
+- **Koji mode** (the original): given a Koji scratch-build task (as produced
+  by Fedora CI for a dist-git package pull request), downloads the build's
+  SRPM/RPMs and runs the
+  [`fedora-package-review-koji`](skills/fedora-package-review-koji/SKILL.md) skill,
+  producing a Fedora-CI-style tmt result.
+- **Copr/PR mode**: given a single package's Copr build ID (as produced by
+  [forge.fedoraproject.org/packaging/package-review](https://forge.fedoraproject.org/packaging/package-review)'s
+  `build-in-copr.yml` for a PR adding a `<name>/<name>.spec` subdirectory),
+  downloads that build's SRPM/RPMs for one chroot and runs the
+  [`fedora-package-review-copr`](skills/fedora-package-review-copr/SKILL.md)
+  skill.
+
+The two skills share almost all of their review logic -- see AGENTS.md's
+"The skills" section if you're editing them.
 
 ## How it works
 
@@ -66,15 +77,25 @@ variables Claude Code itself uses (see `src/llm_review/config.py`):
 Other environment variables:
 
 - `KOJI_TASK_ID` / `KOJI_PROFILE`: input task and koji CLI profile
-  (`shared-tests`' convention).
+  (`shared-tests`' convention). Mutually exclusive with the Copr/PR mode
+  variables below.
+- `COPR_BUILD_ID` / `COPR_CHROOT`: Copr/PR mode's input build (bare ID or a
+  build URL) and which chroot's results to review (default
+  `fedora-rawhide-x86_64`, matching the chroot `build-in-copr.yml` gates on).
+- `PR_CLONE_URL` / `PR_COMMIT` / `PR_PACKAGE`: required alongside
+  `COPR_BUILD_ID` -- the PR's source repo, the exact commit the build was
+  made from, and the package name (its `<name>/<name>.spec` subdirectory),
+  used for rpmlintrc discovery. `copr-cli` must be installed (in addition to
+  `git`/`rpm`/`rpmlint`) for this mode.
 - `LLM_REVIEW_SKILL_DIR`: override the skill directory location. Needed when
-  running from a non-editable pip install, since the skill lives outside the
+  running from a non-editable pip install, since the skills live outside the
   Python package (see `tests/llm-review/main.fmf` for how the tmt test sets
-  this).
+  this). Applies to whichever mode you're running -- point it at the right
+  skill directory for that mode.
 - `LLM_REVIEW_MAX_RETRIES`: how many times to retry an API-level session
   failure (rate limit, network blip, ...) with exponential backoff, default
   `2` (3 attempts total). A malformed/missing report or a setup failure
-  (e.g. no Koji artifacts) is never retried, since retrying wouldn't help.
+  (e.g. no RPM artifacts) is never retried, since retrying wouldn't help.
 
 ## Usage
 
@@ -93,7 +114,27 @@ This writes `review.md` + `results.yaml` to `./results` (or `$TMT_TEST_DATA`
 if set), and exits `0` for `approve`/`needs discussion`, `1` for
 `needs fixes`.
 
+Copr/PR mode reviews one package at a time -- a caller with multiple
+packages in one PR (the normal case `build-in-copr.yml` handles) runs this
+once per package/build ID:
+
+```console
+$ export LLM_REVIEW_BACKEND=bedrock AWS_REGION=... AWS_BEARER_TOKEN_BEDROCK=...
+$ python -m llm_review --copr-build 10660758 \
+    --pr-clone-url https://forge.fedoraproject.org/someuser/package-review.git \
+    --pr-commit b3f1c2... \
+    --pr-package foo \
+    --output-dir results/foo
+```
+
+(package-review's actual deployment uses Bedrock, as shown above -- Vertex
+works here too, same as Koji mode, if you're running this yourself.)
+
 ## tmt plan
+
+This covers Koji mode only -- Copr/PR mode doesn't use tmt at all, it's
+invoked directly as a step in `package-review`'s own Forgejo Actions
+workflow (see AGENTS.md's "The Copr/PR review flow" section).
 
 `plans/llm-review/main.fmf` + `tests/llm-review/main.fmf` wrap this as a tmt
 plan, structured like the existing

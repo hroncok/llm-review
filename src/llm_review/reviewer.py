@@ -1,4 +1,4 @@
-"""Drive a Claude Agent SDK session that runs the fedora-package-review skill."""
+"""Drive a Claude Agent SDK session that runs a fedora-package-review-* skill."""
 
 from __future__ import annotations
 
@@ -24,18 +24,19 @@ from .config import BackendConfig
 
 logger = logging.getLogger(__name__)
 
-SKILL_NAME = "fedora-package-review"
+SKILL_NAME = "fedora-package-review-koji"
 
 # Tool input keys worth showing as a one-line progress indicator, in order of
 # preference (Bash's "command", Read/Glob's "file_path"/"path", Grep's
 # "pattern").
 _TOOL_INPUT_PREVIEW_KEYS = ("command", "file_path", "pattern", "path")
 
-PROMPT = (
-    "Use the fedora-package-review skill to review the Fedora package build "
-    "prepared in this workspace. Write the final report to $REVIEW_OUTPUT_PATH "
-    "as instructed by the skill."
-)
+def _prompt_for(skill_name: str) -> str:
+    return (
+        f"Use the {skill_name} skill to review the Fedora package build "
+        "prepared in this workspace. Write the final report to $REVIEW_OUTPUT_PATH "
+        "as instructed by the skill."
+    )
 
 # \**\s* tolerates the model bolding the word (**approve**) or adding a
 # leading space despite instructions to write it bare; \b stops the match
@@ -158,17 +159,17 @@ async def _run(
     workdir: Path,
     backend: BackendConfig,
     output_path: Path,
+    skill_name: str = SKILL_NAME,
 ) -> ReviewResult:
     # Redirect the CLI's user-level config dir (normally ~/.claude) into an
     # empty directory under the ephemeral workdir. Without this, the
     # subprocess inherits the developer's real HOME and merges their
     # personal ~/.claude/skills/ into the session -- including their own
     # interactive fedora-package-review skill (see AGENTS.md: "the two are
-    # intentionally independent"), which has the same skill name as the one
-    # installed here and would otherwise collide with/shadow it. `skills=`
-    # is a context filter, not a sandbox: an unlisted skill's files are
-    # still reachable via Bash/Read, so redirecting CLAUDE_CONFIG_DIR is the
-    # only way to actually keep the personal skill tree out of this session.
+    # intentionally independent"). `skills=` is a context filter, not a
+    # sandbox: an unlisted skill's files are still reachable via Bash/Read,
+    # so redirecting CLAUDE_CONFIG_DIR is the only way to actually keep the
+    # personal skill tree out of this session.
     claude_config_dir = workdir / ".claude-home"
     claude_config_dir.mkdir(parents=True, exist_ok=True)
     options = ClaudeAgentOptions(
@@ -179,7 +180,7 @@ async def _run(
             "CLAUDE_CONFIG_DIR": str(claude_config_dir),
         },
         model=backend.model,
-        skills=[SKILL_NAME],
+        skills=[skill_name],
         tools=["Bash", "Read", "Grep", "Glob", "Skill"],
         permission_mode="bypassPermissions",
     )
@@ -188,7 +189,7 @@ async def _run(
     model: str | None = None
     cost_usd: float | None = None
     duration_s = 0.0
-    async for message in query(prompt=PROMPT, options=options):
+    async for message in query(prompt=_prompt_for(skill_name), options=options):
         if isinstance(message, AssistantMessage):
             model = message.model
             for block in message.content:
@@ -237,6 +238,7 @@ def run_review(
     output_path: Path,
     max_retries: int = DEFAULT_MAX_RETRIES,
     sleep: Callable[[float], None] = time.sleep,
+    skill_name: str = SKILL_NAME,
 ) -> ReviewResult:
     """Run the review session, retrying on transient API-level failures.
 
@@ -246,7 +248,7 @@ def run_review(
     """
     for attempt in range(max_retries + 1):
         try:
-            return asyncio.run(_run(workdir, backend, output_path))
+            return asyncio.run(_run(workdir, backend, output_path, skill_name))
         except TransientReviewError as exc:
             if attempt >= max_retries:
                 logger.error("Giving up after %d attempt(s): %s", attempt + 1, exc)

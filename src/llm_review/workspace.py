@@ -6,11 +6,12 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 from functools import partial
 from importlib import resources
 from pathlib import Path
 
-from . import koji
+from . import copr, koji
 from .retry import run_with_retry
 
 logger = logging.getLogger(__name__)
@@ -30,15 +31,18 @@ REPOS_TO_CLONE = {
     # memorized knowledge.
     "license-data": "https://forge.fedoraproject.org/legal/fedora-license-data.git",
 }
-SKILL_NAME = "fedora-package-review"
+# See skills/_fragments/ and scripts/build_skills.py for how the two skills
+# share most of their content.
+SKILL_NAME_KOJI = "fedora-package-review-koji"
+SKILL_NAME_COPR = "fedora-package-review-copr"
 
 
 class WorkspaceError(RuntimeError):
     pass
 
 
-def default_skill_source() -> Path:
-    """Locate the ``fedora-package-review`` skill directory.
+def default_skill_source(skill_name: str = SKILL_NAME_KOJI) -> Path:
+    """Locate the ``skill_name`` skill directory.
 
     Tries, in order: an explicit override, the repo's top-level ``skills/``
     directory (works when running in place from a source checkout, e.g. an
@@ -52,11 +56,11 @@ def default_skill_source() -> Path:
         return Path(override)
 
     repo_root = Path(__file__).resolve().parents[2]
-    repo_skill_dir = repo_root / "skills" / SKILL_NAME
+    repo_skill_dir = repo_root / "skills" / skill_name
     if repo_skill_dir.is_dir():
         return repo_skill_dir
 
-    packaged_skill_dir = resources.files("llm_review") / "skill_data" / SKILL_NAME
+    packaged_skill_dir = resources.files("llm_review") / "skill_data" / skill_name
     return Path(str(packaged_skill_dir))
 
 
@@ -104,30 +108,32 @@ def clone_dist_git(workdir: Path, repo_url: str, ref: str) -> None:
         raise
 
 
-def install_skill(workdir: Path, skill_source: Path) -> None:
+def install_skill(workdir: Path, skill_source: Path, skill_name: str = SKILL_NAME_KOJI) -> None:
     if not skill_source.is_dir():
         raise WorkspaceError(
             f"Skill directory not found at {skill_source}; "
             "set LLM_REVIEW_SKILL_DIR to override."
         )
-    dest = workdir / ".claude" / "skills" / SKILL_NAME
+    dest = workdir / ".claude" / "skills" / skill_name
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(skill_source, dest, dirs_exist_ok=True)
 
 
-def ensure_has_rpm_artifacts(artifacts_dir: Path, task_id: str) -> None:
+def ensure_has_rpm_artifacts(artifacts_dir: Path, description: str) -> None:
     """Raise ``WorkspaceError`` if ``artifacts_dir`` has no ``.rpm`` files.
 
     Checked deterministically, before ever invoking the LLM: reviewing an
     empty artifact set isn't a legitimate "needs discussion" outcome, it's a
-    setup failure (e.g. the task's output expired, or the build never
-    produced RPMs) and should be reported as one.
+    setup failure (e.g. the build's output expired, or it never produced
+    RPMs) and should be reported as one. Shared by both the Koji flow
+    (``description`` identifies the task) and the Copr flow (``description``
+    identifies the build).
     """
     if not any(artifacts_dir.glob("*.rpm")):
         raise WorkspaceError(
-            f"Koji task {task_id} has no RPM artifacts to download "
-            "(no .rpm files in the task output) -- there is nothing to review, "
-            "e.g. because the task's output has expired or the build failed "
+            f"{description} has no RPM artifacts to download "
+            "(no .rpm files in the build output) -- there is nothing to review, "
+            "e.g. because the output has expired or the build failed "
             "before producing any RPMs"
         )
 
@@ -169,4 +175,74 @@ def prepare(
 
     artifacts_dir = workdir / "artifacts"
     koji.download_artifacts(task_id, artifacts_dir, profile=koji_profile)
-    ensure_has_rpm_artifacts(artifacts_dir, task_id)
+    ensure_has_rpm_artifacts(artifacts_dir, f"Koji task {task_id}")
+
+
+def clone_pr_package(workdir: Path, clone_url: str, commit: str, package: str) -> None:
+    """Clone ``clone_url`` at ``commit`` and copy just ``<package>/`` into ``dist-git/``.
+
+    The Copr-flow analogue of ``clone_dist_git()``: the PR source repo is a
+    monorepo of ``<name>/<name>.spec`` subdirectories (this package hasn't
+    been accepted/imported into Fedora dist-git yet), so only its own
+    subdirectory is relevant. Landing it at the same ``dist-git/`` path the
+    Koji flow uses means ``skills/_fragments/review-steps.md``'s rpmlintrc
+    discovery works unchanged for both flows.
+
+    Raises ``subprocess.CalledProcessError`` if ``commit`` can't be checked
+    out -- e.g. a force-push rewrote the PR branch after the build. Not
+    fatal to the caller (same as ``clone_dist_git``): rpmlintrc discovery is
+    the only thing that's lost.
+    """
+    dest = workdir / "dist-git"
+    with tempfile.TemporaryDirectory(prefix="pr-source-") as tmp:
+        clone_dir = Path(tmp) / "clone"
+        run_with_retry(["git", "clone", clone_url, str(clone_dir)])
+        subprocess.run(["git", "switch", "-d", commit], cwd=clone_dir, check=True)
+        shutil.copytree(clone_dir / package, dest)
+
+
+def prepare_copr(
+    workdir: Path,
+    build_id: str,
+    chroot: str,
+    pr_clone_url: str,
+    pr_commit: str,
+    pr_package: str,
+    skill_source: Path | None = None,
+) -> None:
+    """Set up guidelines, the skill, and Copr artifacts under ``workdir``.
+
+    The Copr-flow counterpart of ``prepare()`` -- reviews one package from a
+    Fedora Package Review Process PR, built in Copr (see
+    ``skills/fedora-package-review-copr/SKILL.md``).
+    """
+    clone_repos(workdir)
+    install_skill(
+        workdir, skill_source or default_skill_source(SKILL_NAME_COPR), skill_name=SKILL_NAME_COPR
+    )
+
+    (workdir / "copr-buildinfo.txt").write_text(
+        f"Copr build: {build_id}\n"
+        f"Chroot: {chroot}\n"
+        f"Package: {pr_package}\n"
+        f"PR source: {pr_clone_url}\n"
+        f"PR commit: {pr_commit}\n"
+    )
+
+    try:
+        clone_pr_package(workdir, pr_clone_url, pr_commit, pr_package)
+    except subprocess.CalledProcessError as exc:
+        # Not fatal: dist-git only enables rpmlintrc discovery, it's not
+        # needed for the rest of the review. Mirrors the Koji flow's handling
+        # of a fork branch rewritten/deleted after the build.
+        logger.warning(
+            "Could not clone/check out the PR source for package %s at %s (%s); "
+            "continuing without it (no rpmlintrc discovery for this review)",
+            pr_package,
+            pr_commit,
+            exc,
+        )
+
+    artifacts_dir = workdir / "artifacts"
+    copr.download_artifacts(build_id, artifacts_dir, chroot)
+    ensure_has_rpm_artifacts(artifacts_dir, f"Copr build {build_id} ({chroot})")

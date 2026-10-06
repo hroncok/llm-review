@@ -2,8 +2,8 @@
 
 Mirrors the approach already used in packit/tmt-plans' ``utils.get_koji_build``
 and ``utils.get_dist_git`` (task Source: parsing), adapted to not require a
-dist-git checkout -- the fedora-package-review skill extracts the spec file
-from the downloaded SRPM itself.
+dist-git checkout -- the fedora-package-review-koji skill extracts the spec
+file from the downloaded SRPM itself.
 """
 
 from __future__ import annotations

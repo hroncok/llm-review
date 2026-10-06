@@ -6,3 +6,8 @@ results/
 build/
 dist/
 .ruff_cache/
+
+# Scratch clones of the two other repos this project hooks into (see
+# AGENTS.md) -- not part of this repo, kept here only for local editing.
+/package-review/
+/fedora-review-process-reimagined/

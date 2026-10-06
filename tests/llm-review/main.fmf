@@ -17,5 +17,5 @@
   test: |
     python3 -m venv .venv
     .venv/bin/pip install --no-cache-dir "$TMT_TREE"
-    LLM_REVIEW_SKILL_DIR="$TMT_TREE/skills/fedora-package-review" .venv/bin/python -m llm_review
+    LLM_REVIEW_SKILL_DIR="$TMT_TREE/skills/fedora-package-review-koji" .venv/bin/python -m llm_review
   result: custom
