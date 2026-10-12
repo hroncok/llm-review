@@ -187,6 +187,47 @@ default, but that only matters for calls that actually call
 never does, so no GSSAPI handshake is attempted and no credentials/ticket
 are needed for downloading a public build's results.
 
+## File-conflict check: `dnf repoquery`, not a standalone binary
+
+Found live: the skill approved a package that shipped `/usr/bin/proxy`,
+already owned by `libproxy-bin` -- rpmlint doesn't check file-vs-file
+conflicts with the rest of the distro at all, only within the package(s)
+being linted. `review-steps.md`'s Step 3 now cross-references the package's
+file list against `dnf repoquery -q --repo=rawhide --list` (every file
+Rawhide ships) and confirms real matches with `dnf repoquery --repo=rawhide
+-f <path>`. Deliberately `dnf repoquery` (built into `dnf5` itself, present
+wherever `dnf` is -- confirmed via `rpm -qf` on the file providing it, not
+assumed from symmetry with dnf4), not the standalone `repoquery` binary
+(`dnf-utils`), which would be a new package to install in both CI
+environments for no benefit.
+
+`--repo=rawhide` needs the `fedora-rawhide.repo` definition (repoid
+`rawhide`) to exist on disk first -- that's a **separate package**,
+`fedora-repos-rawhide`, not bundled into the base `fedora-repos` (`rpm -qf
+/etc/yum.repos.d/fedora-rawhide.repo` says so directly; don't assume it from
+a dev machine that happens to have it already). Confirmed live that
+`registry.fedoraproject.org/fedora:latest` -- the image both CI flows use --
+does **not** have it installed by default. `fedora-repos-rawhide` is now an
+explicit `require:`/`dnf install` entry in both
+`tests/llm-review/main.fmf` and `package-review`'s `build-in-copr.yml`; once
+installed, `--repo=` enables that (normally disabled-by-default) repo just
+for the one query, no further repo setup needed.
+
+Found live again, right after fixing the above: a review of a package that
+*does* conflict with `libproxy-bin` still came back "no file conflicts
+found." Cause: the instructions piped the `--list` dump's stderr to
+`/dev/null` (to hide harmless `Package ... contains no files` notices) and
+used bare `dnf`, which can be a `sudo dnf` shell alias -- if that hangs/fails
+non-interactively, the real error goes nowhere (swallowed by `2>/dev/null`)
+and `/tmp/rawhide-files.txt` ends up empty, which trivially "finds" no
+conflicts. Fixed by using `/usr/bin/dnf` explicitly and keeping stderr in a
+separate file instead of discarding it, with an explicit instruction to
+sanity-check the dump is actually several million lines before trusting a
+"no conflicts" conclusion. General lesson: **never `2>/dev/null` a command
+whose success the rest of the check depends on** -- filter the noise you
+expect out of the output afterward instead of blinding yourself to failures
+up front.
+
 ## License verification data sources
 
 Found live: the model called a `License:` field's SPDX expression

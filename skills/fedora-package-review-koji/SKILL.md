@@ -169,6 +169,47 @@ Explain every warning/error, and note which ones are false positives. If a
 project's own `.rpmlintrc` suppresses a warning, don't re-flag it as an
 issue -- that's the maintainer's deliberate, checked-in call.
 
+### Check for file conflicts with existing Fedora packages
+
+A package must not ship a *file* that's already owned by an unrelated
+package already in Fedora -- rpmlint does not catch this. Co-owned
+*directories* are normal and fine (e.g. `/usr/share/licenses`,
+`/usr/lib64/pkgconfig`); only a literal file-path collision is a problem.
+An explicit `Conflicts:` tag against the other package can make a real
+collision acceptable -- if you find one, check `Conflicts.adoc` (Step 1)
+for what's actually required before treating it as resolved.
+
+1. From the `rpm -qp -l <RPM>` output above, list the regular files the
+   package under review ships (not directories -- `rpm -qlvp <RPM>` prefixes
+   each entry with permission bits, e.g. `d...` for a directory, so you can
+   tell them apart).
+2. Dump every file already owned by something in Rawhide. Use the absolute
+   path `/usr/bin/dnf`, not bare `dnf` (which may be a `sudo dnf` alias in
+   some shells -- that would hang or fail non-interactively), and keep
+   stderr separate rather than discarding it:
+   ```bash
+   /usr/bin/dnf repoquery -q --repo=rawhide --list \
+     >/tmp/rawhide-files.txt 2>/tmp/rawhide-files.err
+   ```
+   **Verify this actually worked before trusting it**: Rawhide has tens of
+   thousands of packages, so `/tmp/rawhide-files.txt` should be a very large
+   file (several million lines) -- check with `wc -l`. If it's empty or
+   suspiciously small, the command failed; read `/tmp/rawhide-files.err`
+   (ignoring harmless `Package ... contains no files` lines) to find out why,
+   fix it, and retry. An empty/truncated file will trivially look like "no
+   conflicts" -- never report "no conflicts found" without confirming the
+   dump itself is actually complete.
+3. Check whether any of the package's files already appear in that dump.
+4. For each match, confirm what actually owns it:
+   ```bash
+   /usr/bin/dnf repoquery -q --repo=rawhide -f /usr/bin/proxy
+   ```
+   If that's a directory, or only returns a previous build of this same
+   package (a rebuild/update), it's fine. If it returns a *different*
+   package owning the same regular file, check whether the spec declares a
+   `Conflicts:` against it (see above) -- if not, flag it as a **Blocker**,
+   naming the conflicting package.
+
 ## Step 4: Extract and Inspect Sources
 
 The SRPM contains the spec file and the source tarball(s)/patches. Extract it:
@@ -305,6 +346,9 @@ Use `####` subheadings, one per RPM/topic as needed, e.g.:
   `--requires`, `-l`, and `--qf '%{LICENSE}\n'` output from Step 3.
 - **rpmlint output** -- the full raw output from Step 3, including the
   invocation used (plain, or with a discovered `.rpmlintrc`/`rpmlint.toml`).
+- **File conflict check** -- from Step 3: which files (if any) matched an
+  existing Rawhide package, and the `dnf repoquery -f` output resolving each
+  match (or a one-line "no matches" if the file list was clean).
 - **Build log verification** -- the tail of the build log you checked in
   Step 2, showing tests actually running/passing (name the log you checked;
   note if none was available).

@@ -14,6 +14,7 @@
     - rpm
     - rpmlint
     - python3
+    - fedora-repos-rawhide
   test: |
     python3 -m venv .venv
     .venv/bin/pip install --no-cache-dir "$TMT_TREE"
